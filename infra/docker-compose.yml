@@ -1,0 +1,109 @@
+name: indexxxer
+
+# Shared backend config (backend API + celery worker use the same image / env)
+x-backend: &backend
+  build:
+    context: ../backend
+    target: dev
+  env_file: ../.env
+  volumes:
+    - ../backend:/app                            # hot reload: source mounted at runtime
+    - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro      # media library, read-only
+    - thumbnails:/data/thumbnails                # generated thumbnails
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: indexxxer
+      POSTGRES_USER: indexxxer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-indexxxer_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indexxxer -d indexxxer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Redis 7 ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── FastAPI backend ───────────────────────────────────────────────────────────
+  backend:
+    <<: *backend
+    ports:
+      - "8000:8000"
+    command: >
+      uvicorn app.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app/app
+
+  # ── Celery worker ─────────────────────────────────────────────────────────────
+  # Queues:
+  #   indexing   — filesystem scan, metadata extraction
+  #   thumbnails — thumbnail generation (CPU-bound, resumable)
+  #   hashing    — async SHA-256 computation
+  worker:
+    <<: *backend
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=info
+        --queues=indexing,thumbnails,hashing
+        --concurrency=4
+        --hostname=worker@%h
+    # No external port — worker communicates via Redis only
+
+  # ── Next.js frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      target: dev
+    volumes:
+      - ../frontend/src:/app/src
+      - ../frontend/public:/app/public
+      - ../frontend/next.config.ts:/app/next.config.ts
+      - ../frontend/tailwind.config.ts:/app/tailwind.config.ts
+      - ../frontend/postcss.config.mjs:/app/postcss.config.mjs
+      - frontend_next:/app/.next              # preserve .next build cache
+    ports:
+      - "3000:3000"
+    environment:
+      # Empty: Next.js rewrites proxy /api → backend:8000
+      NEXT_PUBLIC_API_URL: ""
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  thumbnails:
+    # Bind mount so thumbnails persist on host at ./data/thumbnails
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${THUMBNAIL_ROOT:-../data/thumbnails}
+  frontend_next:

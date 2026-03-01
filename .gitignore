@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# uv
+uv.lock
+
+# Alembic
+alembic/versions/*.pyc
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+frontend/.env
+frontend/.env.local
+
+# Docker
+data/
+infra/traefik/acme.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Gemini local cache
+.gemini_cache_id
