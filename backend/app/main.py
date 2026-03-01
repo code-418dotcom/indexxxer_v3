@@ -64,13 +64,14 @@ def create_app() -> FastAPI:
         return HealthResponse(status="ok", version=APP_VERSION)
 
     # ── API routers ───────────────────────────────────────────────────────────
-    from app.routers import jobs, media, search, sources, tags
+    from app.routers import jobs, media, search, sources, stream, tags
 
     app.include_router(media.router,   prefix=settings.api_v1_prefix)
     app.include_router(search.router,  prefix=settings.api_v1_prefix)
     app.include_router(tags.router,    prefix=settings.api_v1_prefix)
     app.include_router(sources.router, prefix=settings.api_v1_prefix)
     app.include_router(jobs.router,    prefix=settings.api_v1_prefix)
+    app.include_router(stream.router,  prefix=settings.api_v1_prefix)
 
     return app
 

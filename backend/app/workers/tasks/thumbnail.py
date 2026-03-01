@@ -29,6 +29,7 @@ from app.extractors.video import VIDEO_EXTENSIONS
 from app.models.media_item import MediaItem
 from app.workers.celery_app import celery_app
 from app.workers.db import task_session
+from app.workers.events import emit
 
 log = structlog.get_logger(__name__)
 
@@ -193,4 +194,8 @@ async def _generate_thumbnail(media_item_id: str) -> str | None:
         )
 
     log.info("thumbnail.done", id=media_item_id, path=str(dst_path))
+    # Emit to any active job streams that referenced this item.
+    # We don't have job_id here — emit to a global channel the frontend can subscribe to.
+    # For now, emit is a no-op (job_id="watcher" is filtered); thumbnail done events
+    # are inferred from file.extracted in the UI.
     return str(dst_path)

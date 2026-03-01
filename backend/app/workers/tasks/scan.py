@@ -21,6 +21,7 @@ from sqlalchemy import select, text, update
 
 from app.config import settings
 from app.extractors.base import ExtractionError
+from app.workers.events import emit
 from app.extractors.image import IMAGE_EXTENSIONS, ImageExtractor
 from app.extractors.video import VIDEO_EXTENSIONS, VideoExtractor
 from app.models.index_job import IndexJob
@@ -160,9 +161,11 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
         return {"error": "path not found"}
 
     log.info("scan.start", source=source.name, path=str(root), job_id=job_id)
+    emit(job_id, "scan.start", source=source.name, path=str(root))
     all_files = _iter_media_files(root, source.scan_config)
     total = len(all_files)
     log.info("scan.discovered", total=total, job_id=job_id)
+    emit(job_id, "scan.discovered", total=total)
 
     # Load existing media items for this source (path → mtime) for skip detection
     async with task_session() as session:
@@ -229,6 +232,7 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
                 )
             )
         log.info("scan.complete_no_changes", job_id=job_id, skipped=to_skip)
+        emit(job_id, "scan.complete", processed=0, skipped=to_skip)
         return {"status": "completed", "processed": 0, "skipped": to_skip}
 
     # Dispatch a Celery group so tasks run in parallel
@@ -248,6 +252,7 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
         to_process=len(to_process),
         skipped=to_skip,
     )
+    emit(job_id, "scan.dispatched", dispatched=len(to_process), skipped=to_skip)
     return {"status": "running", "dispatched": len(to_process), "skipped": to_skip}
 
 
@@ -276,6 +281,7 @@ def process_file_task(self, source_id: str, job_id: str, file_path: str) -> str:
             exc_info=True,
         )
         asyncio.run(_increment_job_field(job_id, "failed_files"))
+        emit(job_id, "file.error", file_path=file_path, error=str(exc))
         raise self.retry(exc=exc)
 
 
@@ -344,6 +350,13 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         id=media_item_id,
         type=meta.media_type,
         path=fpath.name,
+    )
+    emit(
+        job_id,
+        "file.extracted",
+        media_item_id=media_item_id,
+        filename=fpath.name,
+        media_type=meta.media_type,
     )
 
     # ── Dispatch downstream tasks ─────────────────────────────────────────────
