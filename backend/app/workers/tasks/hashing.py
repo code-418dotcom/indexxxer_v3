@@ -110,11 +110,6 @@ async def _compute_hash(media_item_id: str) -> str | None:
                 old_path=canonical.file_path,
                 new_path=item.file_path,
             )
-            # Update canonical's path if the new location is different
-            if canonical.file_path != item.file_path:
-                canonical.file_path = item.file_path
-                canonical.filename = src.name
-
             # Re-load current item (separate session above may be stale)
             dup = await session.get(MediaItem, media_item_id)
             if dup:
@@ -141,7 +136,16 @@ async def _compute_hash(media_item_id: str) -> str | None:
                                 confidence=1.0,
                             )
                         )
+                # Delete dup FIRST so it releases the (source_id, file_path)
+                # unique constraint slot before we update canonical's path.
                 await session.delete(dup)
+                await session.flush()
+
+            # Update canonical's path if the new location is different.
+            # Safe to do now that dup has been flushed/deleted.
+            if canonical.file_path != item.file_path:
+                canonical.file_path = item.file_path
+                canonical.filename = src.name
 
         else:
             # ── No duplicate: just write the hash ─────────────────────────────

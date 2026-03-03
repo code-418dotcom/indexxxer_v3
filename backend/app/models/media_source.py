@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String, Text
@@ -37,4 +39,12 @@ class MediaSource(Base, TimestampMixin):
     )
     index_jobs: Mapped[list["IndexJob"]] = relationship(  # noqa: F821
         back_populates="source", lazy="noload", cascade="all, delete-orphan"
+    )
+    credential: Mapped["SourceCredential | None"] = relationship(  # noqa: F821
+        "SourceCredential",
+        back_populates="source",
+        uselist=False,
+        lazy="noload",
+        foreign_keys="SourceCredential.source_id",
+        cascade="all, delete-orphan",
     )

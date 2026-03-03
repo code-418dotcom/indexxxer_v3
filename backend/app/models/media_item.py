@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -13,6 +14,13 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+try:
+    from pgvector.sqlalchemy import Vector as _Vector
+    _VECTOR_TYPE = _Vector(768)
+except ImportError:
+    # pgvector not installed — clip_embedding stored as null-only placeholder
+    _VECTOR_TYPE = Text()  # type: ignore[assignment]
 
 from app.models.base import Base, TimestampMixin, new_uuid
 
@@ -90,10 +98,46 @@ class MediaItem(Base, TimestampMixin):
     # Updated by Alembic-managed trigger; also refreshed by tagging worker
     search_vector: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
 
+    # ── M2: CLIP semantic embedding ──────────────────────────────────────────
+    # 768-dim ViT-L/14 embedding (unit-normalised); NULL until GPU worker runs
+    clip_embedding: Mapped[list[float] | None] = mapped_column(
+        _VECTOR_TYPE, nullable=True
+    )
+    # pending | computing | done | error
+    clip_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+
+    # ── M2: User favourites ──────────────────────────────────────────────────
+    is_favourite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # ── M3: AI enrichment ────────────────────────────────────────────────────
+    # BLIP-2 image caption
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # pending | computing | done | error | skipped
+    caption_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+    # Whisper transcript (videos ≤ 10 min only)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # pending | transcribing | done | error | skipped
+    transcript_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+    # Ollama LLM summary (generated when caption or transcript exists)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # pending | summarising | done | error | skipped
+    summary_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+
     # ── Relationships ────────────────────────────────────────────────────────
     source: Mapped["MediaSource"] = relationship(  # noqa: F821
         back_populates="media_items", lazy="noload"
     )
     media_tags: Mapped[list["MediaTag"]] = relationship(  # noqa: F821
+        back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
+    )
+    faces: Mapped[list["MediaFace"]] = relationship(  # noqa: F821
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )

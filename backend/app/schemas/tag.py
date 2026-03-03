@@ -27,6 +27,7 @@ class TagRef(BaseModel):
 
     id: str
     name: str
+    slug: str
     category: str | None = None
     color: str | None = None
     confidence: float

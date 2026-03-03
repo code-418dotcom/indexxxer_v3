@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { getToken, setToken } from "@/lib/api/client";
 import { Topbar } from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Eye, EyeOff, Loader2, Save } from "lucide-react";
+import { ExternalLink, Loader2, Settings2, Shield, User } from "lucide-react";
 import client from "@/lib/api/client";
+import { getMe } from "@/lib/api/auth";
 import type { HealthResponse } from "@/types/api";
 
 export default function SettingsPage() {
@@ -14,84 +14,92 @@ export default function SettingsPage() {
     <div className="flex flex-col h-full">
       <Topbar title="Settings" />
       <div className="flex-1 overflow-y-auto px-6 py-6 max-w-2xl space-y-8">
-        <ApiTokenSection />
+        <AccountSection />
         <ConnectionStatus />
       </div>
     </div>
   );
 }
 
-// ─── API token ────────────────────────────────────────────────────────────
+// ─── Account / user info ───────────────────────────────────────────────────
 
-function ApiTokenSection() {
-  const [token, setLocalToken] = useState("");
-  const [show, setShow] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setLocalToken(getToken());
-  }, []);
-
-  const save = () => {
-    setToken(token.trim());
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+function AccountSection() {
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: getMe,
+    retry: false,
+  });
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-[var(--color-foreground)] mb-1">
-        API token
+      <h2 className="text-sm font-semibold text-[var(--color-foreground)] mb-3 flex items-center gap-1.5">
+        <User className="w-4 h-4" /> Account
       </h2>
-      <p className="text-xs text-[var(--color-muted-foreground)] mb-3">
-        The static bearer token set as <code className="font-mono bg-[var(--color-muted)] px-1 rounded">API_TOKEN</code> in your backend <code className="font-mono bg-[var(--color-muted)] px-1 rounded">.env</code>.
-        Stored in your browser&apos;s localStorage.
-      </p>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <input
-            type={show ? "text" : "password"}
-            value={token}
-            onChange={(e) => setLocalToken(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-            placeholder="Paste your API token…"
-            className={cn(
-              "w-full h-9 px-3 pr-9 text-sm rounded-lg font-mono",
-              "bg-[var(--color-muted)] border border-[var(--color-border)]",
-              "text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)]",
-              "focus:outline-none focus:border-[hsl(217_91%_60%)] focus:ring-1 focus:ring-[hsl(217_91%_60%/0.3)]",
-              "transition-colors"
-            )}
-          />
-          <button
-            type="button"
-            onClick={() => setShow(!show)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
-          >
-            {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-[var(--color-muted-foreground)] text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
         </div>
-        <button
-          onClick={save}
-          className={cn(
-            "flex items-center gap-1.5 px-3 h-9 text-sm rounded-lg font-medium transition-colors",
-            saved
-              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-              : "bg-[hsl(217_91%_60%)] hover:bg-[hsl(217_91%_55%)] text-white"
-          )}
-        >
-          {saved ? (
-            <>
-              <CheckCircle2 className="w-4 h-4" /> Saved
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4" /> Save
-            </>
-          )}
-        </button>
-      </div>
+      ) : user ? (
+        <div className="rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+          <Row label="Email" value={user.email} />
+          <Row label="Username" value={user.username} />
+          <Row
+            label="Role"
+            value={
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+                  user.role === "admin"
+                    ? "bg-amber-500/15 text-amber-400"
+                    : "bg-blue-500/15 text-blue-400"
+                )}
+              >
+                {user.role === "admin" && <Shield className="w-3 h-3" />}
+                {user.role}
+              </span>
+            }
+          />
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Not signed in.{" "}
+          <Link href="/login" className="text-blue-400 hover:underline">
+            Sign in
+          </Link>
+        </p>
+      )}
+
+      {user?.role === "admin" && (
+        <div className="mt-3">
+          <Link
+            href="/admin/analytics"
+            className="inline-flex items-center gap-1.5 text-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-colors"
+          >
+            <Settings2 className="w-4 h-4" />
+            Open Admin Dashboard
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+        </div>
+      )}
     </section>
+  );
+}
+
+function Row({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3">
+      <span className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wide">
+        {label}
+      </span>
+      <span className="text-sm text-[var(--color-foreground)]">{value}</span>
+    </div>
   );
 }
 
@@ -101,10 +109,7 @@ function ConnectionStatus() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["health"],
     queryFn: async () => {
-      const { data } = await client.get<HealthResponse>("/health", {
-        // health endpoint is unauthenticated — strip interceptor token for this call
-        headers: { "X-API-Token": undefined },
-      });
+      const { data } = await client.get<HealthResponse>("/health");
       return data;
     },
     refetchInterval: 30_000,
@@ -116,7 +121,11 @@ function ConnectionStatus() {
         Backend connection
       </h2>
       <p className="text-xs text-[var(--color-muted-foreground)] mb-3">
-        Checks connectivity to the FastAPI backend at <code className="font-mono bg-[var(--color-muted)] px-1 rounded">/api/v1/health</code>.
+        Checks connectivity to the FastAPI backend at{" "}
+        <code className="font-mono bg-[var(--color-muted)] px-1 rounded">
+          /api/v1/health
+        </code>
+        .
       </p>
       <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)]">
         {isLoading ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getToken } from "@/lib/api/client";
+import { getAccessToken } from "@/lib/api/client";
 import type { JobEvent } from "@/types/api";
 
 export interface UseJobStreamOptions {
@@ -25,7 +25,7 @@ export function useJobStream({ jobId, enabled = true, onEvent }: UseJobStreamOpt
   useEffect(() => {
     if (!jobId || !enabled) return;
 
-    const token = getToken();
+    const token = getAccessToken();
     const url = `/api/v1/jobs/${jobId}/stream?token=${encodeURIComponent(token)}`;
     const es = new EventSource(url);
     esRef.current = es;

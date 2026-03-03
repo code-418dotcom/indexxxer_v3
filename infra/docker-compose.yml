@@ -20,7 +20,7 @@ services:
 
   # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
   db:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: indexxxer
       POSTGRES_USER: indexxxer
@@ -66,15 +66,62 @@ services:
   #   indexing   — filesystem scan, metadata extraction
   #   thumbnails — thumbnail generation (CPU-bound, resumable)
   #   hashing    — async SHA-256 computation
+  #   ai         — Ollama summaries, face clustering, AI backfill
   worker:
     <<: *backend
     command: >
       celery -A app.workers.celery_app worker
         --loglevel=info
-        --queues=indexing,thumbnails,hashing
+        --queues=indexing,thumbnails,hashing,ai,webhooks
         --concurrency=4
         --hostname=worker@%h
     # No external port — worker communicates via Redis only
+
+  # ── GPU Celery worker (CLIP embeddings) ───────────────────────────────────────
+  # Requires NVIDIA Container Toolkit on the host.
+  # Opt-in: `docker compose --profile gpu up` or set COMPOSE_PROFILES=gpu.
+  gpu_worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.ml
+    env_file: ../.env
+    volumes:
+      - ../backend:/app
+      - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro
+      - thumbnails:/data/thumbnails
+      - clip_models:/root/.cache/clip
+      - hf_models:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      celery -A app.workers.celery_app worker
+        --loglevel=info
+        --queues=ml
+        --concurrency=1
+        --hostname=gpu_worker@%h
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles: [gpu]
+    restart: unless-stopped
+
+  # ── Celery beat scheduler ─────────────────────────────────────────────────────
+  # Runs the celery-beat periodic task scheduler (one instance only).
+  beat:
+    <<: *backend
+    command: >
+      celery -A app.workers.celery_app beat
+        --loglevel=info
+        --scheduler celery.beat.PersistentScheduler
+        --schedule /tmp/celerybeat-schedule
+    # No external port — communicates via Redis only
 
   # ── Next.js frontend ──────────────────────────────────────────────────────────
   frontend:
@@ -91,7 +138,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Empty: Next.js rewrites proxy /api → backend:8000
+      # Container-to-container: Next.js rewrites proxy /api → backend:8000
+      BACKEND_URL: "http://backend:8000"
       NEXT_PUBLIC_API_URL: ""
     depends_on:
       - backend
@@ -99,6 +147,8 @@ services:
 
 volumes:
   postgres_data:
+  clip_models:
+  hf_models:
   thumbnails:
     # Bind mount so thumbnails persist on host at ./data/thumbnails
     driver: local

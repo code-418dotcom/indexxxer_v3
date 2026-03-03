@@ -11,14 +11,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Put the venv outside /app so the dev volume mount doesn't shadow it.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Install Python dependencies.
 # Without a uv.lock file present, uv generates one inside the layer (not persisted to host).
 # Run `uv lock` locally and commit uv.lock when pinning production deps.
 COPY pyproject.toml .
 RUN uv sync --no-install-project --no-dev
-
-# Add venv to PATH for CMD invocations
-ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 

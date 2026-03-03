@@ -3,7 +3,7 @@ Saved filter sets — M2 feature, schema defined in M1 to avoid a breaking migra
 In M1 these are global (no user ownership). A user_id FK is added in M4.
 """
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,3 +18,7 @@ class SavedFilter(Base, TimestampMixin):
     # Serialised FilterSet object
     filters: Mapped[dict] = mapped_column(JSONB, nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # M4: optional per-user ownership (nullable for anonymous/legacy filters)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )

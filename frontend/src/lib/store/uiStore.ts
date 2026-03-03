@@ -11,6 +11,7 @@ interface UIState {
   thumbnailSize: ThumbnailSize;
   sidebarCollapsed: boolean;
   setViewMode: (m: ViewMode) => void;
+  toggleView: () => void;
   setThumbnailSize: (s: ThumbnailSize) => void;
   setSidebarCollapsed: (c: boolean) => void;
   toggleSidebar: () => void;
@@ -24,6 +25,8 @@ export const useUIStore = create<UIState>()(
       sidebarCollapsed: false,
 
       setViewMode: (viewMode) => set({ viewMode }),
+      toggleView: () =>
+        set((s) => ({ viewMode: s.viewMode === "grid" ? "list" : "grid" })),
       setThumbnailSize: (thumbnailSize) => set({ thumbnailSize }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () =>
@@ -31,7 +34,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "indexxxer-ui",
-      partialState: (state: UIState) => ({
+      partialize: (state: UIState) => ({
         viewMode: state.viewMode,
         thumbnailSize: state.thumbnailSize,
         sidebarCollapsed: state.sidebarCollapsed,

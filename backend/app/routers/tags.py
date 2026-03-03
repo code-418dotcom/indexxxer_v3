@@ -116,6 +116,7 @@ async def delete_tag(
     if not tag:
         raise not_found("Tag", tag_id)
     await db.delete(tag)
+    await db.flush()
 
 
 @router.get("/{tag_id}/media", response_model=PaginatedResponse[MediaItemSummary])

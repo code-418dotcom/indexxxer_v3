@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { Film, ImageIcon } from "lucide-react";
+import { Film, Heart, ImageIcon, User } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
-import { thumbnailUrl } from "@/lib/api/media";
+import { thumbnailUrl, patchMedia } from "@/lib/api/media";
 import type { MediaItem } from "@/types/api";
 
 interface MediaCardProps {
@@ -22,7 +23,16 @@ const SIZE_CLASS = {
 
 export function MediaCard({ item, size, selected, onClick, onSelect }: MediaCardProps) {
   const isVideo = item.media_type === "video";
-  const hasThumbnail = !!item.thumbnail_path;
+  const hasThumbnail = !!item.thumbnail_url;
+  const queryClient = useQueryClient();
+
+  const toggleFavourite = useMutation({
+    mutationFn: () => patchMedia(item.id, { is_favourite: !item.is_favourite }),
+    onSuccess: () => {
+      // Invalidate all media/search queries so lists refresh
+      queryClient.invalidateQueries({ queryKey: ["media"] });
+    },
+  });
 
   return (
     <div
@@ -75,6 +85,34 @@ export function MediaCard({ item, size, selected, onClick, onSelect }: MediaCard
         >
           {item.media_type}
         </span>
+
+        {/* Face count badge */}
+        {item.face_count > 0 && (
+          <span className="absolute bottom-1.5 left-7 flex items-center gap-0.5 text-[10px] font-medium bg-black/70 text-white px-1.5 py-0.5 rounded">
+            <User className="w-2.5 h-2.5" />
+            {item.face_count}
+          </span>
+        )}
+
+        {/* Favourite heart */}
+        <button
+          className={cn(
+            "absolute bottom-1.5 left-1.5 p-1 rounded-full transition-all",
+            item.is_favourite
+              ? "opacity-100 text-rose-400"
+              : "opacity-0 group-hover:opacity-100 text-white/70 hover:text-rose-400"
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFavourite.mutate();
+          }}
+          title={item.is_favourite ? "Remove from favourites" : "Add to favourites"}
+        >
+          <Heart
+            className="w-3.5 h-3.5"
+            fill={item.is_favourite ? "currentColor" : "none"}
+          />
+        </button>
 
         {/* Select checkbox overlay */}
         <div

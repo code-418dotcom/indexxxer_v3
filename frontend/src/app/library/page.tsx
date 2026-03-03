@@ -1,46 +1,133 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { listMedia } from "@/lib/api/media";
 import { search } from "@/lib/api/search";
 import { useUIStore } from "@/lib/store/uiStore";
 import { MediaCard } from "@/components/media/MediaCard";
-import { MediaDetail } from "@/components/media/MediaDetail";
+import { ImageOverlay } from "@/components/media/ImageOverlay";
+import { VideoOverlay } from "@/components/media/VideoOverlay";
 import { SearchBar } from "@/components/search/SearchBar";
 import { FilterPanel } from "@/components/search/FilterPanel";
+import { SavedFilters } from "@/components/search/SavedFilters";
 import { ViewToggle } from "@/components/media/ViewToggle";
 import { Topbar } from "@/components/layout/Topbar";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn, formatBytes } from "@/lib/utils";
 import type { MediaItem, SearchParams } from "@/types/api";
 import { Film, ImageIcon, Loader2 } from "lucide-react";
 
 export default function LibraryPage() {
+  const searchParamsHook = useSearchParams();
+  const router = useRouter();
+
+  // Read params from URL
+  const urlFavourite = searchParamsHook.get("favourite") === "true" ? true : undefined;
+  const urlType = (searchParamsHook.get("type") ?? undefined) as "image" | "video" | undefined;
+
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<SearchParams>({});
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState<SearchParams>({
+    favourite: urlFavourite,
+    type: urlType,
+  });
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const { viewMode, thumbnailSize } = useUIStore();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const LIMIT = 48;
 
-  const params: SearchParams & { page: number; limit: number } = {
+  // Sync URL params → filter state when navigating via sidebar links
+  useEffect(() => {
+    setFilters((f) => ({ ...f, favourite: urlFavourite, type: urlType }));
+    setSelected(null);
+  }, [urlFavourite, urlType]);
+
+  const queryParams: SearchParams = {
     ...filters,
     q: query || undefined,
-    page,
     limit: LIMIT,
   };
 
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["media", params],
-    queryFn: () => (query ? search(params) : listMedia(params)),
-    placeholderData: (prev) => prev,
-  });
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
+    useInfiniteQuery({
+      queryKey: ["media", queryParams],
+      queryFn: ({ pageParam = 1 }) =>
+        query
+          ? search({ ...queryParams, page: pageParam })
+          : listMedia({ ...queryParams, page: pageParam }),
+      getNextPageParam: (last) =>
+        last.page < last.pages ? last.page + 1 : undefined,
+      initialPageParam: 1,
+      placeholderData: (prev) => prev,
+    });
+
+  const items = Array.from(
+    new Map(data?.pages.flatMap((p) => p.items).map((i) => [i.id, i]) ?? []).values()
+  );
+  const total = data?.pages[0]?.total ?? 0;
+  const isFetching = isFetchingNextPage;
 
   const updateFilters = useCallback((patch: Partial<SearchParams>) => {
     setFilters((f) => ({ ...f, ...patch }));
-    setPage(1);
   }, []);
+
+  // Infinite scroll sentinel
+  const sentinelRef = useInfiniteScroll({
+    onLoadMore: fetchNextPage,
+    disabled: !hasNextPage || isFetchingNextPage,
+  });
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA";
+
+      if (e.key === "/" && !inInput) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+      if (inInput) return;
+
+      if (e.key === "Escape") {
+        setSelected(null);
+        return;
+      }
+      if (e.key === "v") {
+        useUIStore.getState().toggleView();
+        return;
+      }
+      if (e.key === "g") {
+        useUIStore.getState().setViewMode("grid");
+        return;
+      }
+      if (e.key === "l") {
+        useUIStore.getState().setViewMode("list");
+        return;
+      }
+      if (e.key === "f" && selected) {
+        // Toggle favourite on selected item — handled by MediaCard/Detail mutation
+        return;
+      }
+      if (e.key === "ArrowRight" && selected) {
+        const idx = items.findIndex((i) => i.id === selected.id);
+        const next = items[idx + 1];
+        if (next) setSelected(next);
+        return;
+      }
+      if (e.key === "ArrowLeft" && selected) {
+        const idx = items.findIndex((i) => i.id === selected.id);
+        const prev = items[idx - 1];
+        if (prev) setSelected(prev);
+        return;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [items, selected]);
 
   const gridCols = {
     sm: "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9",
@@ -48,18 +135,18 @@ export default function LibraryPage() {
     lg: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
   };
 
-  const items = data?.items ?? [];
-
   return (
     <div className="flex flex-col h-full">
-      <Topbar title="Library">
+      <Topbar title={filters.favourite ? "Favourites" : filters.type === "image" ? "Images" : filters.type === "video" ? "Videos" : "Library"}>
         <div className="flex items-center gap-2 max-w-2xl">
           <SearchBar
             value={query}
-            onChange={(v) => { setQuery(v); setPage(1); }}
+            onChange={(v) => setQuery(v)}
             className="flex-1"
+            inputRef={searchInputRef}
           />
           <FilterPanel filters={filters} onChange={updateFilters} />
+          <SavedFilters currentFilters={filters} onApply={(f) => setFilters(f)} />
           <ViewToggle />
         </div>
       </Topbar>
@@ -73,8 +160,13 @@ export default function LibraryPage() {
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <>
-                <span>{data?.total?.toLocaleString() ?? 0} items</span>
+                <span>{total.toLocaleString()} items</span>
                 {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
+                {query && (
+                  <span className="text-violet-400 text-[10px]">
+                    {items.length >= 3 && query.split(" ").length >= 3 ? "· semantic" : "· text"}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -118,39 +210,35 @@ export default function LibraryPage() {
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Pagination */}
-          {data && data.pages > 1 && (
-            <div className="flex items-center justify-center gap-2 px-5 py-3 border-t border-[var(--color-border)]">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-40 transition-colors"
-              >
-                Previous
-              </button>
-              <span className="text-xs text-[var(--color-muted-foreground)]">
-                {page} / {data.pages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
-                disabled={page === data.pages}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-40 transition-colors"
-              >
-                Next
-              </button>
-            </div>
-          )}
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-4" />
+            {isFetchingNextPage && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-[var(--color-muted-foreground)]" />
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Detail panel */}
-        {selected && (
-          <div className="w-80 shrink-0 overflow-hidden">
-            <MediaDetail item={selected} onClose={() => setSelected(null)} />
-          </div>
-        )}
       </div>
+
+      {/* Image overlay — fixed position, covers full viewport */}
+      {selected && selected.media_type === "image" && (
+        <ImageOverlay
+          item={selected}
+          onClose={() => setSelected(null)}
+          onSelectItem={setSelected}
+        />
+      )}
+
+      {/* Video overlay — fixed position, covers full viewport */}
+      {selected && selected.media_type === "video" && (
+        <VideoOverlay
+          item={selected}
+          onClose={() => setSelected(null)}
+          onSelectItem={setSelected}
+        />
+      )}
     </div>
   );
 }
@@ -179,6 +267,9 @@ function MediaListRow({
         {isVideo ? <Film className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
       </div>
       <span className="flex-1 text-sm text-[var(--color-foreground)] truncate">{item.filename}</span>
+      {item.is_favourite && (
+        <span className="text-rose-400 shrink-0">♥</span>
+      )}
       <span className="text-xs text-[var(--color-muted-foreground)] shrink-0">{formatBytes(item.file_size)}</span>
       <span
         className={cn(

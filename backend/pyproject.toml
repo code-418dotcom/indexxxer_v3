@@ -12,7 +12,7 @@ dependencies = [
     "aiofiles>=23.2",           # async file streaming
 
     # Database
-    "sqlalchemy[asyncio]>=2.0",
+    "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.29",
     "alembic>=1.13",
 
@@ -37,6 +37,39 @@ dependencies = [
 
     # Logging
     "structlog>=24.1",
+
+    # pgvector — SQLAlchemy Vector type + asyncpg codec
+    "pgvector>=0.3",
+
+    # Auth — JWT + password hashing
+    "python-jose[cryptography]>=3.3",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt>=3.2,<4.0",       # passlib 1.7.x is incompatible with bcrypt 4+
+    "email-validator>=2.0",   # required by pydantic EmailStr (schemas/user.py)
+
+    # Connectors — SMB + FTP
+    "smbprotocol>=1.12",
+    "aioftp>=0.22",
+    "cryptography>=42",
+
+    # GraphQL
+    "strawberry-graphql[fastapi]>=0.235",
+
+    # PDF rendering
+    "pymupdf>=1.24",
+]
+
+[project.optional-dependencies]
+# Install with: uv sync --extra ml
+# Required on the GPU worker for CLIP, BLIP-2, Whisper, InsightFace
+ml = [
+    "open-clip-torch>=2.26",
+    "faster-whisper>=1.1",
+    "insightface>=0.7",
+    "onnxruntime-gpu>=1.18",
+    "transformers>=4.44",
+    "accelerate>=0.34",
+    "opencv-python-headless>=4.10",
 ]
 
 [tool.uv]

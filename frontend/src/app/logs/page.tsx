@@ -110,11 +110,14 @@ export default function LogsPage() {
               </div>
             ) : (
               jobs.map((job) => (
-                <button
+                <div
                   key={job.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedJob(job)}
+                  onKeyDown={(e) => e.key === "Enter" && setSelectedJob(job)}
                   className={cn(
-                    "w-full text-left px-4 py-3 border-b border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors",
+                    "w-full text-left px-4 py-3 border-b border-[var(--color-border)] hover:bg-[var(--color-muted)] transition-colors cursor-pointer",
                     selectedJob?.id === job.id && "bg-[hsl(217_91%_60%/0.08)]"
                   )}
                 >
@@ -156,7 +159,7 @@ export default function LogsPage() {
                       Cancel
                     </button>
                   )}
-                </button>
+                </div>
               ))
             )}
           </div>

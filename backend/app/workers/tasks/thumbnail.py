@@ -65,7 +65,8 @@ def _generate_video_thumbnail(src: Path, dst: Path) -> None:
     Extract one frame from the video using ffmpeg.
 
     Strategy:
-    - First try: seek to 5 s (avoids blank/black opening frames in many videos)
+    - First try: seek to 20 s (past intros/title cards)
+    - Fallback:  seek to 5 s  (for short clips < 20 s)
     - Fallback:  seek to 0 s  (for very short clips < 5 s)
     """
     w, h = settings.thumbnail_width, settings.thumbnail_height
@@ -89,10 +90,10 @@ def _generate_video_thumbnail(src: Path, dst: Path) -> None:
         )
         return result.returncode == 0 and dst.exists() and dst.stat().st_size > 0
 
-    if not _run(5):
-        # Fallback: first frame
-        if not _run(0):
-            raise RuntimeError(f"ffmpeg could not produce a thumbnail for {src.name}")
+    if not _run(20):
+        if not _run(5):
+            if not _run(0):
+                raise RuntimeError(f"ffmpeg could not produce a thumbnail for {src.name}")
 
 
 # ── Celery task ────────────────────────────────────────────────────────────────
@@ -135,13 +136,12 @@ async def _generate_thumbnail(media_item_id: str) -> str | None:
         if dst.exists() and dst.stat().st_size > 0:
             log.debug("thumbnail.already_exists", id=media_item_id, path=str(dst))
             # Ensure DB is in sync even if a previous task updated the file but
-            # didn't finish the DB write.
-            if item.thumbnail_path != str(dst):
-                await session.execute(
-                    update(MediaItem)
-                    .where(MediaItem.id == media_item_id)
-                    .values(thumbnail_path=str(dst))
-                )
+            # didn't finish the DB write (e.g. re-scan after a crash).
+            await session.execute(
+                update(MediaItem)
+                .where(MediaItem.id == media_item_id)
+                .values(thumbnail_path=str(dst), index_status="indexed")
+            )
             return str(dst)
 
         src = Path(item.file_path)

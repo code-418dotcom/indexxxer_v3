@@ -1,7 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,6 +43,26 @@ class Settings(BaseSettings):
     # Celery task time limit for SHA-256 hashing (seconds, 3TB worst-case)
     hash_time_limit: int = 300
 
+    # ── M4 Auth / JWT ────────────────────────────────────────────────────────
+    jwt_secret: str = "change-me-jwt-secret"
+    jwt_expire_minutes: int = 60
+    jwt_refresh_expire_days: int = 30
+    admin_email: str = "admin@indexxxer.local"
+    admin_password: str = "changeme"
+
+    # ── M4 Encryption (Fernet) ────────────────────────────────────────────────
+    # Generate once: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str = ""
+
+    # ── M4 Webhooks ──────────────────────────────────────────────────────────
+    webhook_secret: str = "change-me-webhook-secret"
+
+    # ── M3 AI / Ollama ───────────────────────────────────────────────────────
+    ollama_url: str = "http://host.docker.internal:11434"
+    ollama_model: str = "qwen2.5-coder:32b"
+    # Maximum video duration (seconds) eligible for Whisper transcription
+    whisper_max_duration: int = 600
+
     # ── File watcher ─────────────────────────────────────────────────────────
     # Use PollingObserver (works on WSL2 + Windows NTFS mounts where inotify fails)
     watcher_use_polling: bool = True
@@ -51,15 +70,9 @@ class Settings(BaseSettings):
     watcher_poll_interval: int = 60
 
     # ── CORS ─────────────────────────────────────────────────────────────────
+    # Must be a JSON array in .env: CORS_ORIGINS=["http://localhost:3000"]
+    # pydantic-settings JSON-decodes list fields before validators run.
     cors_origins: list[str] = ["http://localhost:3000"]
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors(cls, v: str | list[str]) -> list[str]:
-        """Allow CORS_ORIGINS as a comma-separated string in .env."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
 
     @property
     def thumbnail_root_path(self) -> Path:

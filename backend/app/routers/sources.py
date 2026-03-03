@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import Auth
 from app.database import get_db
+from app.schemas.credential import CredentialCreate, CredentialResponse, CredentialUpdate
 from app.schemas.index_job import JobResponse, ScanRequest
 from app.schemas.media_source import SourceCreate, SourceResponse, SourceUpdate
 from app.services import source_service
@@ -76,3 +77,47 @@ async def trigger_scan(
     """
     req = body or ScanRequest()
     return await source_service.trigger_scan(db, source_id, req)
+
+
+# ── Credential endpoints ───────────────────────────────────────────────────────
+
+@router.post(
+    "/{source_id}/credentials",
+    response_model=CredentialResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_credential(
+    source_id: str,
+    body: CredentialCreate,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    return await source_service.create_credential(db, source_id, body)
+
+
+@router.get("/{source_id}/credentials", response_model=CredentialResponse)
+async def get_credential(
+    source_id: str,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    return await source_service.get_credential(db, source_id)
+
+
+@router.put("/{source_id}/credentials", response_model=CredentialResponse)
+async def update_credential(
+    source_id: str,
+    body: CredentialUpdate,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    return await source_service.update_credential(db, source_id, body)
+
+
+@router.delete("/{source_id}/credentials", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_credential(
+    source_id: str,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    await source_service.delete_credential(db, source_id)

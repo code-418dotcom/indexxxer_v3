@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import not_found
 from app.core.pagination import PaginationParams, paginate
+from app.models.media_face import MediaFace
 from app.models.media_item import MediaItem
 from app.models.tag import MediaTag, Tag
 from app.schemas.media_item import (
@@ -28,6 +29,11 @@ log = structlog.get_logger(__name__)
 
 # Reusable eager-load option: media_items → media_tags → tags
 WITH_TAGS = [selectinload(MediaItem.media_tags).selectinload(MediaTag.tag)]
+# Includes face rows for face_count
+WITH_TAGS_AND_FACES = [
+    selectinload(MediaItem.media_tags).selectinload(MediaTag.tag),
+    selectinload(MediaItem.faces),
+]
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────────
@@ -37,6 +43,7 @@ def _build_tag_refs(media_tags: list[MediaTag]) -> list[TagRef]:
         TagRef(
             id=mt.tag.id,
             name=mt.tag.name,
+            slug=mt.tag.slug,
             category=mt.tag.category,
             color=mt.tag.color,
             confidence=mt.confidence,
@@ -48,6 +55,11 @@ def _build_tag_refs(media_tags: list[MediaTag]) -> list[TagRef]:
 
 
 def to_media_summary(item: MediaItem) -> MediaItemSummary:
+    # faces is loaded via selectinload; use len() if available, else 0
+    try:
+        face_count = len(item.faces)
+    except Exception:
+        face_count = 0
     return MediaItemSummary(
         id=item.id,
         source_id=item.source_id,
@@ -63,6 +75,13 @@ def to_media_summary(item: MediaItem) -> MediaItemSummary:
         tags=_build_tag_refs(item.media_tags),
         index_status=item.index_status,
         indexed_at=item.indexed_at,
+        is_favourite=item.is_favourite,
+        clip_status=item.clip_status,
+        caption=item.caption,
+        caption_status=item.caption_status,
+        transcript_status=item.transcript_status,
+        summary_status=item.summary_status,
+        face_count=face_count,
     )
 
 
@@ -78,7 +97,41 @@ def to_media_detail(item: MediaItem) -> MediaItemDetail:
         index_error=item.index_error,
         created_at=item.created_at,
         updated_at=item.updated_at,
+        transcript=item.transcript,
+        summary=item.summary,
     )
+
+
+async def get_similar_items(
+    db: AsyncSession,
+    item_id: str,
+    limit: int = 12,
+) -> list[MediaItemSummary]:
+    """Return the *limit* most visually similar items using CLIP cosine distance."""
+    item = await db.get(MediaItem, item_id)
+    if not item or item.clip_embedding is None:
+        return []
+
+    try:
+        from pgvector.sqlalchemy import Vector
+        from sqlalchemy import literal
+
+        query_vec = literal(item.clip_embedding, type_=Vector(768))
+        distance = MediaItem.clip_embedding.op("<=>")(query_vec)
+
+        stmt = (
+            select(MediaItem)
+            .options(*WITH_TAGS)
+            .where(MediaItem.id != item_id)
+            .where(MediaItem.clip_status == "done")
+            .where(MediaItem.clip_embedding.isnot(None))
+            .order_by(distance)
+            .limit(limit)
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        return [to_media_summary(r) for r in rows]
+    except Exception:
+        return []
 
 
 # ── Sort helpers ────────────────────────────────────────────────────────────────
@@ -108,10 +161,11 @@ async def list_media(
     source_id: str | None = None,
     tag_ids: list[str] | None = None,
     status: str | None = None,
+    favourite: bool | None = None,
     sort: str = "date",
     order: str = "desc",
 ) -> dict:
-    stmt = select(MediaItem).options(*WITH_TAGS)
+    stmt = select(MediaItem).options(*WITH_TAGS_AND_FACES)
 
     if media_type:
         stmt = stmt.where(MediaItem.media_type == media_type)
@@ -119,6 +173,8 @@ async def list_media(
         stmt = stmt.where(MediaItem.source_id == source_id)
     if status:
         stmt = stmt.where(MediaItem.index_status == status)
+    if favourite is not None:
+        stmt = stmt.where(MediaItem.is_favourite == favourite)
     if tag_ids:
         for tid in tag_ids:
             stmt = stmt.where(
@@ -141,7 +197,7 @@ async def list_media(
 
 
 async def get_media_item(db: AsyncSession, item_id: str) -> MediaItemDetail:
-    stmt = select(MediaItem).options(*WITH_TAGS).where(MediaItem.id == item_id)
+    stmt = select(MediaItem).options(*WITH_TAGS_AND_FACES).where(MediaItem.id == item_id)
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
         raise not_found("MediaItem", item_id)
@@ -159,13 +215,16 @@ async def get_media_item_orm(db: AsyncSession, item_id: str) -> MediaItem:
 async def patch_media_item(
     db: AsyncSession, item_id: str, patch: MediaItemPatch
 ) -> MediaItemDetail:
-    stmt = select(MediaItem).options(*WITH_TAGS).where(MediaItem.id == item_id)
+    stmt = select(MediaItem).options(*WITH_TAGS_AND_FACES).where(MediaItem.id == item_id)
     item = (await db.execute(stmt)).scalar_one_or_none()
     if not item:
         raise not_found("MediaItem", item_id)
 
     if patch.filename is not None:
         item.filename = patch.filename
+
+    if patch.is_favourite is not None:
+        item.is_favourite = patch.is_favourite
 
     if patch.tags:
         for op in patch.tags:
@@ -180,10 +239,10 @@ async def patch_media_item(
 
     await db.flush()
 
-    # Re-fetch with updated tags
+    # Re-fetch with updated tags and faces
     item = (
         await db.execute(
-            select(MediaItem).options(*WITH_TAGS).where(MediaItem.id == item_id)
+            select(MediaItem).options(*WITH_TAGS_AND_FACES).where(MediaItem.id == item_id)
         )
     ).scalar_one()
     return to_media_detail(item)
@@ -195,6 +254,7 @@ async def delete_media_item(db: AsyncSession, item_id: str) -> None:
     if not item:
         raise not_found("MediaItem", item_id)
     await db.delete(item)
+    await db.flush()
 
 
 async def bulk_action(db: AsyncSession, req: BulkActionRequest) -> BulkResult:

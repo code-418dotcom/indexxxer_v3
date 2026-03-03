@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { QueryProvider } from "@/components/layout/QueryProvider";
@@ -25,7 +26,7 @@ export default function RootLayout({
             <div className="flex h-full">
               <Sidebar />
               <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {children}
+                <Suspense>{children}</Suspense>
               </main>
             </div>
           </QueryProvider>

@@ -7,7 +7,7 @@ to prevent FastAPI matching "bulk" as a path parameter.
 
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,7 @@ async def list_media(
     source_id: str | None = Query(None),
     tag_ids: list[str] = Query(default=[], description="Filter by tag IDs (AND logic)"),
     item_status: str | None = Query(None, alias="status"),
+    favourite: bool | None = Query(None, description="true = favourites only"),
     sort: str = Query(default="date", description="date | name | size | mtime"),
     order: str = Query(default="desc", description="asc | desc"),
     params: PaginationParams = Depends(),
@@ -47,6 +48,7 @@ async def list_media(
         source_id=source_id,
         tag_ids=tag_ids or None,
         status=item_status,
+        favourite=favourite,
         sort=sort,
         order=order,
     )
@@ -59,6 +61,17 @@ async def bulk_action(
     db: AsyncSession = Depends(get_db),
 ):
     return await media_service.bulk_action(db, body)
+
+
+@router.get("/{item_id}/similar", response_model=list[MediaItemSummary])
+async def get_similar(
+    item_id: str,
+    limit: int = Query(default=12, ge=1, le=50),
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return visually similar items using CLIP cosine distance."""
+    return await media_service.get_similar_items(db, item_id, limit=limit)
 
 
 @router.get("/{item_id}", response_model=MediaItemDetail)
@@ -92,7 +105,6 @@ async def delete_media_item(
 @router.get("/{item_id}/thumbnail", response_class=FileResponse)
 async def serve_thumbnail(
     item_id: str,
-    _: None = Auth,
     db: AsyncSession = Depends(get_db),
 ):
     """Serve the generated thumbnail JPEG. Returns 404 if not yet generated."""
@@ -106,7 +118,6 @@ async def serve_thumbnail(
 @router.get("/{item_id}/stream")
 async def stream_media(
     item_id: str,
-    _: None = Auth,
     db: AsyncSession = Depends(get_db),
 ):
     """

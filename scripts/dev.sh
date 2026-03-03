@@ -22,7 +22,27 @@ fi
 mkdir -p "$THUMBNAIL_DIR"
 echo "📁 Thumbnail dir: $THUMBNAIL_DIR"
 
-# ── 3. Bring up services ─────────────────────────────────────────────────────
-echo "🚀 Starting indexxxer stack..."
 cd "$ROOT/infra"
-docker compose up --build "$@"
+
+# ── 3. Build images ──────────────────────────────────────────────────────────
+echo "🔨 Building images..."
+docker compose build
+
+# ── 4. Start DB + Redis, wait for health ─────────────────────────────────────
+echo "🐘 Starting database and cache..."
+docker compose up -d db redis
+
+echo "⏳ Waiting for database..."
+until docker compose exec -T db pg_isready -U indexxxer -d indexxxer -q 2>/dev/null; do
+  sleep 1
+done
+echo "✅ Database ready."
+
+# ── 5. Run Alembic migrations ─────────────────────────────────────────────────
+echo "🗄  Running migrations..."
+docker compose run --rm --no-deps backend alembic upgrade head
+echo "✅ Migrations applied."
+
+# ── 6. Bring up the full stack ───────────────────────────────────────────────
+echo "🚀 Starting indexxxer stack..."
+docker compose up "$@"

@@ -20,8 +20,22 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
+from app.core.security import decode_token
+from jose import JWTError
 
 log = structlog.get_logger(__name__)
+
+
+def _validate_stream_token(token: str) -> bool:
+    """Accept JWT access tokens or the static API token (backward compat)."""
+    # Try JWT first
+    try:
+        payload = decode_token(token)
+        return payload.get("type") == "access"
+    except JWTError:
+        pass
+    # Fall back to static token
+    return token == settings.api_token
 
 router = APIRouter(prefix="/jobs", tags=["stream"])
 
@@ -47,7 +61,7 @@ async def stream_job_events(
         const es = new EventSource(`/api/v1/jobs/${id}/stream?token=xxx`)
         es.onmessage = (e) => console.log(JSON.parse(e.data))
     """
-    if token != settings.api_token:
+    if not _validate_stream_token(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API token",

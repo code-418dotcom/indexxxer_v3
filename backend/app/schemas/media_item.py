@@ -25,12 +25,20 @@ class MediaItemSummary(BaseModel):
     tags: list[TagRef] = []
     index_status: str
     indexed_at: datetime | None = None
+    is_favourite: bool = False
+    clip_status: str = "pending"
+    # M3 AI status fields (summary-level — no full text in list view)
+    caption: str | None = None
+    caption_status: str = "pending"
+    transcript_status: str = "pending"
+    summary_status: str = "pending"
+    face_count: int = 0
 
     model_config = {"from_attributes": True}
 
 
 class MediaItemDetail(MediaItemSummary):
-    """Full detail view — adds codec, hash, timestamps."""
+    """Full detail view — adds codec, hash, timestamps, and full AI text."""
 
     bitrate: int | None = None
     codec: str | None = None
@@ -40,6 +48,9 @@ class MediaItemDetail(MediaItemSummary):
     index_error: str | None = None
     created_at: datetime
     updated_at: datetime
+    # M3: full text fields (omitted from list view for bandwidth)
+    transcript: str | None = None
+    summary: str | None = None
 
 
 class TagOp(BaseModel):
@@ -50,6 +61,7 @@ class TagOp(BaseModel):
 class MediaItemPatch(BaseModel):
     filename: str | None = None
     tags: list[TagOp] | None = None
+    is_favourite: bool | None = None
 
 
 class BulkActionRequest(BaseModel):

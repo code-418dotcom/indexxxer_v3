@@ -20,13 +20,15 @@ from celery import group
 from sqlalchemy import select, text, update
 
 from app.config import settings
+from app.connectors.factory import get_connector
 from app.extractors.base import ExtractionError
-from app.workers.events import emit
+from app.workers.events import emit, emit_webhook_event
 from app.extractors.image import IMAGE_EXTENSIONS, ImageExtractor
 from app.extractors.video import VIDEO_EXTENSIONS, VideoExtractor
 from app.models.index_job import IndexJob
 from app.models.media_item import MediaItem
 from app.models.media_source import MediaSource
+from app.models.source_credential import SourceCredential
 from app.workers.celery_app import celery_app
 from app.workers.db import task_session
 
@@ -150,19 +152,39 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
         job.started_at = datetime.now(timezone.utc)
         await session.flush()
 
-    root = Path(source.path)
-    if not root.exists():
-        async with task_session() as session:
-            job = await session.get(IndexJob, job_id)
-            job.status = "failed"
-            job.error_message = f"Source path does not exist: {source.path}"
-            job.completed_at = datetime.now(timezone.utc)
-        log.error("scan.path_missing", path=str(root), source_id=source_id)
-        return {"error": "path not found"}
+    # For local sources, validate the path exists before fetching connector
+    if source.source_type == "local":
+        root = Path(source.path)
+        if not root.exists():
+            async with task_session() as session:
+                job = await session.get(IndexJob, job_id)
+                job.status = "failed"
+                job.error_message = f"Source path does not exist: {source.path}"
+                job.completed_at = datetime.now(timezone.utc)
+            log.error("scan.path_missing", path=str(root), source_id=source_id)
+            return {"error": "path not found"}
 
-    log.info("scan.start", source=source.name, path=str(root), job_id=job_id)
-    emit(job_id, "scan.start", source=source.name, path=str(root))
-    all_files = _iter_media_files(root, source.scan_config)
+    # Load credentials for non-local sources
+    credential = None
+    if source.source_type != "local":
+        async with task_session() as session:
+            result = await session.execute(
+                select(SourceCredential).where(SourceCredential.source_id == source_id)
+            )
+            credential = result.scalar_one_or_none()
+
+    connector = get_connector(source, credential)
+
+    log.info("scan.start", source=source.name, path=str(source.path), job_id=job_id)
+    emit(job_id, "scan.start", source=source.name, path=str(source.path))
+    await emit_webhook_event("scan.started", {"job_id": job_id, "source_id": source_id, "source_name": source.name})
+
+    # Collect all files via connector
+    all_files = []
+    async with connector:
+        async for entry in connector.iter_files(source.scan_config):
+            all_files.append(entry)
+
     total = len(all_files)
     log.info("scan.discovered", total=total, job_id=job_id)
     emit(job_id, "scan.discovered", total=total)
@@ -188,15 +210,9 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
     to_process: list[str] = []
     to_skip: int = 0
 
-    for fpath in all_files:
-        fpath_str = str(fpath)
-        try:
-            stat = fpath.stat()
-            mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-        except OSError:
-            # File disappeared between walk and stat — skip
-            to_skip += 1
-            continue
+    for entry in all_files:
+        fpath_str = entry.path
+        mtime = entry.mtime
 
         known_mtime = existing.get(fpath_str)
         if known_mtime is not None:
@@ -233,6 +249,7 @@ async def _scan_source(task, source_id: str, job_id: str) -> dict:
             )
         log.info("scan.complete_no_changes", job_id=job_id, skipped=to_skip)
         emit(job_id, "scan.complete", processed=0, skipped=to_skip)
+        await emit_webhook_event("scan.completed", {"job_id": job_id, "source_id": source_id, "processed": 0, "skipped": to_skip})
         return {"status": "completed", "processed": 0, "skipped": to_skip}
 
     # Dispatch a Celery group so tasks run in parallel
@@ -360,6 +377,12 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
     )
 
     # ── Dispatch downstream tasks ─────────────────────────────────────────────
+    from app.workers.tasks.ai import (
+        compute_caption_task,
+        compute_transcript_task,
+        detect_faces_task,
+    )
+    from app.workers.tasks.clip import compute_clip_embedding_task
     from app.workers.tasks.hashing import compute_hash_task
     from app.workers.tasks.thumbnail import generate_thumbnail_task
 
@@ -371,6 +394,35 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         kwargs={"media_item_id": media_item_id},
         queue="hashing",
     )
+    # Dispatch CLIP embedding after thumbnail is expected to be ready.
+    # The task will check for thumbnail_path; if missing it marks status=error.
+    async with task_session() as session:
+        it = await session.get(MediaItem, media_item_id)
+        if it:
+            it.clip_status = "computing"
+    compute_clip_embedding_task.apply_async(
+        kwargs={"media_id": media_item_id},
+        queue="ml",
+        countdown=5,  # small delay to let thumbnail task finish first
+    )
+
+    # ── M3 AI tasks (after thumbnail is ready) ────────────────────────────────
+    if meta.media_type == "image":
+        compute_caption_task.apply_async(
+            kwargs={"media_id": media_item_id}, queue="ml", countdown=10
+        )
+        detect_faces_task.apply_async(
+            kwargs={"media_id": media_item_id}, queue="ml", countdown=15
+        )
+    elif meta.media_type == "video":
+        from app.config import settings
+        if (meta.duration_seconds or 0) <= settings.whisper_max_duration:
+            compute_transcript_task.apply_async(
+                kwargs={"media_id": media_item_id}, queue="ml", countdown=10
+            )
+        detect_faces_task.apply_async(
+            kwargs={"media_id": media_item_id}, queue="ml", countdown=15
+        )
 
     # ── Update job progress ───────────────────────────────────────────────────
     # "watcher" is a sentinel used by the filesystem watcher for ad-hoc

@@ -1,14 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { ExternalLink, Film, ImageIcon, Tag, X } from "lucide-react";
+import { ExternalLink, Film, Heart, ImageIcon, Mic, Sparkles, Tag, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn, formatBytes, formatDate, formatDuration } from "@/lib/utils";
-import { thumbnailUrl, streamUrl } from "@/lib/api/media";
+import { getSimilar, patchMedia, thumbnailUrl, streamUrl } from "@/lib/api/media";
 import type { MediaItem } from "@/types/api";
 
 interface MediaDetailProps {
   item: MediaItem;
   onClose?: () => void;
+  onSelectItem?: (item: MediaItem) => void;
 }
 
 function MetaRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -21,8 +23,21 @@ function MetaRow({ label, value }: { label: string; value?: string | number | nu
   );
 }
 
-export function MediaDetail({ item, onClose }: MediaDetailProps) {
+export function MediaDetail({ item, onClose, onSelectItem }: MediaDetailProps) {
   const isVideo = item.media_type === "video";
+  const queryClient = useQueryClient();
+
+  const toggleFavourite = useMutation({
+    mutationFn: () => patchMedia(item.id, { is_favourite: !item.is_favourite }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media"] }),
+  });
+
+  const { data: similar } = useQuery({
+    queryKey: ["similar", item.id],
+    queryFn: () => getSimilar(item.id, 12),
+    enabled: item.clip_status === "done",
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-card)] border-l border-[var(--color-border)]">
@@ -32,6 +47,22 @@ export function MediaDetail({ item, onClose }: MediaDetailProps) {
           {item.filename}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
+          {/* Favourite toggle */}
+          <button
+            onClick={() => toggleFavourite.mutate()}
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              item.is_favourite
+                ? "text-rose-400 hover:text-rose-300"
+                : "text-[var(--color-muted-foreground)] hover:text-rose-400"
+            )}
+            title={item.is_favourite ? "Remove from favourites" : "Add to favourites"}
+          >
+            <Heart
+              className="w-4 h-4"
+              fill={item.is_favourite ? "currentColor" : "none"}
+            />
+          </button>
           <a
             href={streamUrl(item.id)}
             target="_blank"
@@ -55,7 +86,7 @@ export function MediaDetail({ item, onClose }: MediaDetailProps) {
       <div className="flex-1 overflow-y-auto">
         {/* Preview */}
         <div className="relative w-full aspect-video bg-black flex items-center justify-center">
-          {item.thumbnail_path ? (
+          {item.thumbnail_url ? (
             isVideo ? (
               <video
                 src={streamUrl(item.id)}
@@ -104,7 +135,7 @@ export function MediaDetail({ item, onClose }: MediaDetailProps) {
         )}
 
         {/* Metadata */}
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 border-b border-[var(--color-border)]">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">
             File info
           </p>
@@ -126,6 +157,7 @@ export function MediaDetail({ item, onClose }: MediaDetailProps) {
           )}
           {item.codec && <MetaRow label="Codec" value={item.codec} />}
           <MetaRow label="Indexed" value={formatDate(item.indexed_at)} />
+          <MetaRow label="CLIP" value={item.clip_status} />
           {item.file_hash && (
             <MetaRow label="Hash (SHA-256)" value={item.file_hash.slice(0, 16) + "…"} />
           )}
@@ -135,6 +167,146 @@ export function MediaDetail({ item, onClose }: MediaDetailProps) {
             </div>
           )}
         </div>
+
+        {/* AI: Caption */}
+        {item.caption_status === "done" && item.caption && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
+              <span className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">
+                Caption
+              </span>
+              <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
+                BLIP-2
+              </span>
+            </div>
+            <p className="text-xs text-[var(--color-foreground)] italic leading-relaxed">
+              {item.caption}
+            </p>
+          </div>
+        )}
+
+        {/* AI: Transcript */}
+        {item.transcript_status === "done" && item.transcript && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Mic className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
+              <span className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">
+                Transcript
+              </span>
+              <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
+                Whisper
+              </span>
+            </div>
+            <pre className="text-xs text-[var(--color-foreground)] whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto font-sans">
+              {item.transcript}
+            </pre>
+          </div>
+        )}
+
+        {/* AI: Summary */}
+        {item.summary_status === "done" && item.summary && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
+              <span className="text-xs font-semibold text-[var(--color-muted-foreground)] uppercase tracking-wider">
+                Summary
+              </span>
+              <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
+                Ollama
+              </span>
+            </div>
+            <p className="text-xs text-[var(--color-foreground)] leading-relaxed">
+              {item.summary}
+            </p>
+          </div>
+        )}
+
+        {/* AI: Status indicators (when pipeline is still running) */}
+        {(item.caption_status === "computing" ||
+          item.transcript_status === "transcribing" ||
+          item.summary_status === "summarising") && (
+          <div className="px-4 py-3 border-b border-[var(--color-border)]">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">
+              AI Pipeline
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {item.caption_status !== "pending" && item.caption_status !== "done" && (
+                <span className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-full",
+                  item.caption_status === "computing"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : item.caption_status === "error"
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+                )}>
+                  Caption: {item.caption_status}
+                </span>
+              )}
+              {item.transcript_status !== "pending" && item.transcript_status !== "done" && (
+                <span className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-full",
+                  item.transcript_status === "transcribing"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : item.transcript_status === "error"
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+                )}>
+                  Transcript: {item.transcript_status}
+                </span>
+              )}
+              {item.summary_status !== "pending" && item.summary_status !== "done" && (
+                <span className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-full",
+                  item.summary_status === "summarising"
+                    ? "bg-blue-500/20 text-blue-400"
+                    : item.summary_status === "error"
+                    ? "bg-red-500/20 text-red-400"
+                    : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+                )}>
+                  Summary: {item.summary_status}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Similar items */}
+        {similar && similar.length > 0 && (
+          <div className="px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-2">
+              Similar
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {similar.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onSelectItem?.(s)}
+                  className="relative w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-[var(--color-muted)] hover:ring-2 hover:ring-[hsl(217_91%_60%)] transition-all"
+                  title={s.filename}
+                >
+                  {s.thumbnail_url ? (
+                    <Image
+                      src={thumbnailUrl(s.id)}
+                      alt={s.filename}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-[var(--color-muted-foreground)]">
+                      {s.media_type === "video" ? (
+                        <Film className="w-5 h-5" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5" />
+                      )}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
