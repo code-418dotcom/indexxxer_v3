@@ -18,6 +18,7 @@ import {
   ScrollText,
   Settings,
   Star,
+  Tag,
   Users,
   Webhook,
   Zap,
@@ -30,6 +31,7 @@ import { logout } from "@/lib/api/auth";
 const NAV = [
   { href: "/library",   label: "Library",   Icon: LayoutGrid },
   { href: "/performers",label: "Performers", Icon: Star       },
+  { href: "/tags",      label: "Tags",      Icon: Tag        },
   { href: "/galleries", label: "Galleries", Icon: Archive    },
   { href: "/pdfs",      label: "PDFs",      Icon: FileText   },
   { href: "/sources",   label: "Sources",   Icon: FolderOpen },

@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     # Maximum video duration (seconds) eligible for Whisper transcription
     whisper_max_duration: int = 600
 
+    # ── NSFW AI Tagger ─────────────────────────────────────────────────────
+    nsfw_tagger_url: str = "http://nsfw_tagger:8000"
+    nsfw_tagger_threshold: float = 0.4
+    nsfw_tagger_frame_interval: float = 2.0
+
     # ── File watcher ─────────────────────────────────────────────────────────
     # Use PollingObserver (works on WSL2 + Windows NTFS mounts where inotify fails)
     watcher_use_polling: bool = True

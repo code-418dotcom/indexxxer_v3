@@ -426,6 +426,14 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         countdown=2,
     )
 
+    # ── NSFW AI auto-tagging ─────────────────────────────────────────────────
+    from app.workers.tasks.nsfw_tag import nsfw_tag_task
+    nsfw_tag_task.apply_async(
+        kwargs={"media_item_id": media_item_id},
+        queue="ai",
+        countdown=15,  # wait for thumbnail to be ready
+    )
+
     # ── M3 AI tasks (after thumbnail is ready) ────────────────────────────────
     if meta.media_type == "image":
         compute_caption_task.apply_async(

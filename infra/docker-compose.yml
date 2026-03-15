@@ -146,6 +146,27 @@ services:
       - backend
     restart: unless-stopped
 
+  # ── NSFW AI Tagger ──────────────────────────────────────────────────────────
+  # Purpose-built adult content tagger. Opt-in: --profile tagger
+  # Setup: clone https://github.com/skier233/nsfw_ai_model_server next to this repo
+  # and run select_models.sh to download the free model.
+  nsfw_tagger:
+    build:
+      context: ${NSFW_TAGGER_PATH:-../../nsfw_ai_model_server}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro
+    ports:
+      - "8001:8000"
+    profiles: [tagger]
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   clip_models:

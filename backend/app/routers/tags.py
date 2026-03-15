@@ -70,6 +70,17 @@ async def create_tag(
     return TagResponse.model_validate(tag)
 
 
+@router.post("/ai/backfill")
+async def backfill_ai_tags(
+    _: None = Auth,
+):
+    """Trigger NSFW AI tagging for all media items that don't have AI tags yet."""
+    from app.workers.tasks.nsfw_tag import backfill_nsfw_tags_task
+
+    result = backfill_nsfw_tags_task.apply_async(queue="ai")
+    return {"task_id": result.id, "status": "dispatched"}
+
+
 @router.get("/{tag_id}", response_model=TagResponse)
 async def get_tag(
     tag_id: str,
