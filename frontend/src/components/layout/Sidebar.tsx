@@ -30,7 +30,6 @@ import { logout } from "@/lib/api/auth";
 const NAV = [
   { href: "/library",   label: "Library",   Icon: LayoutGrid },
   { href: "/performers",label: "Performers", Icon: Star       },
-  { href: "/faces",     label: "Faces",     Icon: Users      },
   { href: "/galleries", label: "Galleries", Icon: Archive    },
   { href: "/pdfs",      label: "PDFs",      Icon: FileText   },
   { href: "/sources",   label: "Sources",   Icon: FolderOpen },

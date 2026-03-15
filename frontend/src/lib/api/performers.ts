@@ -34,6 +34,7 @@ export async function deletePerformer(id: string): Promise<void> {
 export async function getPerformerMedia(id: string, params?: {
   page?: number;
   limit?: number;
+  type?: string;
 }): Promise<PaginatedResponse<MediaItem>> {
   const { data } = await client.get(`/performers/${id}/media`, { params });
   return data;

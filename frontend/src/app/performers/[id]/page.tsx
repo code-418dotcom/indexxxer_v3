@@ -8,10 +8,13 @@ import {
   ArrowLeft,
   Camera,
   ExternalLink,
+  Film,
+  ImageIcon,
   RefreshCw,
   Trash2,
   UserCircle,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Topbar } from "@/components/layout/Topbar";
 import { ImageOverlay } from "@/components/media/ImageOverlay";
 import { VideoOverlay } from "@/components/media/VideoOverlay";
@@ -82,6 +85,7 @@ export default function PerformerDetailPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mediaPage, setMediaPage] = useState(1);
+  const [mediaType, setMediaType] = useState<"video" | "image">("video");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<MediaItem | null>(null);
 
@@ -92,8 +96,8 @@ export default function PerformerDetailPage() {
   });
 
   const { data: mediaData, isLoading: mediaLoading } = useQuery({
-    queryKey: ["performer-media", id, mediaPage],
-    queryFn: () => getPerformerMedia(id, { page: mediaPage, limit: 36 }),
+    queryKey: ["performer-media", id, mediaPage, mediaType],
+    queryFn: () => getPerformerMedia(id, { page: mediaPage, limit: 36, type: mediaType }),
     staleTime: 30_000,
   });
 
@@ -298,9 +302,35 @@ export default function PerformerDetailPage() {
               {/* Media grid */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-[var(--color-foreground)]">
-                    Media ({mediaTotal})
-                  </h2>
+                  <div className="flex items-center gap-1 rounded-lg bg-[var(--color-muted)] p-0.5">
+                    <button
+                      onClick={() => { setMediaType("video"); setMediaPage(1); }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        mediaType === "video"
+                          ? "bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm"
+                          : "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                      )}
+                    >
+                      <Film className="w-3 h-3" />
+                      Videos
+                    </button>
+                    <button
+                      onClick={() => { setMediaType("image"); setMediaPage(1); }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        mediaType === "image"
+                          ? "bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm"
+                          : "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
+                      )}
+                    >
+                      <ImageIcon className="w-3 h-3" />
+                      Galleries
+                    </button>
+                  </div>
+                  <span className="text-xs text-[var(--color-muted-foreground)]">
+                    {mediaTotal} {mediaType === "video" ? "video" : "image"}{mediaTotal !== 1 ? "s" : ""}
+                  </span>
                 </div>
 
                 {mediaLoading && (
@@ -309,7 +339,7 @@ export default function PerformerDetailPage() {
 
                 {!mediaLoading && media.length === 0 && (
                   <p className="text-xs text-[var(--color-muted-foreground)] opacity-50">
-                    No media linked yet. Try &quot;Re-match Files&quot; or add this performer&apos;s name to your filenames/directories.
+                    No {mediaType === "video" ? "videos" : "images"} linked yet. Try &quot;Re-match Files&quot; or add this performer&apos;s name to your filenames/directories.
                   </p>
                 )}
 

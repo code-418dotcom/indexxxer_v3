@@ -344,13 +344,16 @@ async def match_performer(
 @router.get("/{performer_id}/media", response_model=PaginatedResponse[MediaItemSummary])
 async def get_performer_media(
     performer_id: str,
+    type: str | None = None,
     params: PaginationParams = Depends(),
     _: None = Auth,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all media items linked to this performer (paginated)."""
+    """Return media items linked to this performer (paginated). Filter by type=image|video."""
     p = await db.get(Performer, performer_id)
     if not p:
         raise not_found("Performer", performer_id)
 
-    return await media_service.list_media(db, params, performer_id=performer_id)
+    return await media_service.list_media(
+        db, params, performer_id=performer_id, media_type=type or None
+    )
