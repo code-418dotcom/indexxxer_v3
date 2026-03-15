@@ -31,7 +31,7 @@ from app.schemas.performer import (
     PerformerUpdate,
     ScrapeRequest,
 )
-from app.services import media_service, performer_service
+from app.services import gallery_service, media_service, performer_service
 from app.services.storage_service import get_performer_image_path
 
 log = structlog.get_logger(__name__)
@@ -357,3 +357,29 @@ async def get_performer_media(
     return await media_service.list_media(
         db, params, performer_id=performer_id, media_type=type or None
     )
+
+
+@router.get("/{performer_id}/galleries", response_model=dict)
+async def get_performer_galleries(
+    performer_id: str,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=48, ge=1, le=200),
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return galleries whose path matches this performer's name/aliases."""
+    p = await db.get(Performer, performer_id)
+    if not p:
+        raise not_found("Performer", performer_id)
+
+    items, total = await gallery_service.list_galleries_for_performer(
+        db, performer_id, api_v1_prefix=settings.api_v1_prefix, page=page, limit=limit
+    )
+    pages = (total + limit - 1) // limit if total else 0
+    return {
+        "items": [i.model_dump() for i in items],
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": pages,
+    }

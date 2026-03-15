@@ -21,14 +21,17 @@ import { VideoOverlay } from "@/components/media/VideoOverlay";
 import {
   deletePerformer,
   getPerformer,
+  getPerformerGalleries,
   getPerformerMedia,
   matchPerformer,
   performerImageUrl,
   scrapePerformer,
   uploadPerformerImage,
 } from "@/lib/api/performers";
+import { galleryCoverUrl } from "@/lib/api/galleries";
 import { thumbnailUrl } from "@/lib/api/media";
-import type { MediaItem } from "@/types/api";
+import { formatBytes } from "@/lib/utils";
+import type { Gallery, MediaItem } from "@/types/api";
 
 // ── Info row ─────────────────────────────────────────────────────────────────
 
@@ -77,6 +80,48 @@ function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) 
   );
 }
 
+// ── Gallery card ────────────────────────────────────────────────────────────
+
+function GalleryCard({ gallery }: { gallery: Gallery }) {
+  const cover = gallery.cover_url ? galleryCoverUrl(gallery.id) : null;
+
+  return (
+    <a
+      href={`/galleries/${gallery.id}`}
+      className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all cursor-pointer"
+    >
+      <div className="relative w-full aspect-square bg-[var(--color-muted)]">
+        {cover ? (
+          <Image
+            src={cover}
+            alt={gallery.filename}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            unoptimized
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <ImageIcon className="w-10 h-10 text-[var(--color-muted-foreground)] opacity-30" />
+          </div>
+        )}
+        <span className="absolute bottom-1.5 right-1.5 text-[10px] font-semibold bg-black/70 text-white px-1.5 py-0.5 rounded">
+          {gallery.image_count} images
+        </span>
+      </div>
+      <div className="px-2 py-1.5">
+        <p className="text-[11px] text-[var(--color-foreground)] truncate" title={gallery.filename}>
+          {gallery.filename}
+        </p>
+        {gallery.file_size && (
+          <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
+            {formatBytes(gallery.file_size)}
+          </p>
+        )}
+      </div>
+    </a>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PerformerDetailPage() {
@@ -85,7 +130,8 @@ export default function PerformerDetailPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [mediaPage, setMediaPage] = useState(1);
-  const [mediaType, setMediaType] = useState<"video" | "image">("video");
+  const [galleryPage, setGalleryPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"video" | "gallery">("video");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<MediaItem | null>(null);
 
@@ -96,9 +142,17 @@ export default function PerformerDetailPage() {
   });
 
   const { data: mediaData, isLoading: mediaLoading } = useQuery({
-    queryKey: ["performer-media", id, mediaPage, mediaType],
-    queryFn: () => getPerformerMedia(id, { page: mediaPage, limit: 36, type: mediaType }),
+    queryKey: ["performer-media", id, mediaPage],
+    queryFn: () => getPerformerMedia(id, { page: mediaPage, limit: 36, type: "video" }),
     staleTime: 30_000,
+    enabled: activeTab === "video",
+  });
+
+  const { data: galleriesData, isLoading: galleriesLoading } = useQuery({
+    queryKey: ["performer-galleries", id, galleryPage],
+    queryFn: () => getPerformerGalleries(id, { page: galleryPage, limit: 36 }),
+    staleTime: 30_000,
+    enabled: activeTab === "gallery",
   });
 
   const scrape = useMutation({
@@ -136,6 +190,10 @@ export default function PerformerDetailPage() {
   const media = mediaData?.items ?? [];
   const mediaPages = mediaData?.pages ?? 1;
   const mediaTotal = mediaData?.total ?? 0;
+
+  const galleries = (galleriesData?.items ?? []) as Gallery[];
+  const galleryPages = galleriesData?.pages ?? 1;
+  const galleryTotal = galleriesData?.total ?? 0;
 
   if (isLoading) {
     return (
@@ -299,15 +357,15 @@ export default function PerformerDetailPage() {
                 </div>
               </div>
 
-              {/* Media grid */}
+              {/* Media / Galleries */}
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-1 rounded-lg bg-[var(--color-muted)] p-0.5">
                     <button
-                      onClick={() => { setMediaType("video"); setMediaPage(1); }}
+                      onClick={() => { setActiveTab("video"); setMediaPage(1); }}
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                        mediaType === "video"
+                        activeTab === "video"
                           ? "bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm"
                           : "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
                       )}
@@ -316,10 +374,10 @@ export default function PerformerDetailPage() {
                       Videos
                     </button>
                     <button
-                      onClick={() => { setMediaType("image"); setMediaPage(1); }}
+                      onClick={() => { setActiveTab("gallery"); setGalleryPage(1); }}
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                        mediaType === "image"
+                        activeTab === "gallery"
                           ? "bg-[var(--color-card)] text-[var(--color-foreground)] shadow-sm"
                           : "text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]"
                       )}
@@ -329,48 +387,100 @@ export default function PerformerDetailPage() {
                     </button>
                   </div>
                   <span className="text-xs text-[var(--color-muted-foreground)]">
-                    {mediaTotal} {mediaType === "video" ? "video" : "image"}{mediaTotal !== 1 ? "s" : ""}
+                    {activeTab === "video"
+                      ? `${mediaTotal} video${mediaTotal !== 1 ? "s" : ""}`
+                      : `${galleryTotal} galler${galleryTotal !== 1 ? "ies" : "y"}`}
                   </span>
                 </div>
 
-                {mediaLoading && (
-                  <div className="text-xs text-[var(--color-muted-foreground)]">Loading media...</div>
+                {/* Videos tab */}
+                {activeTab === "video" && (
+                  <>
+                    {mediaLoading && (
+                      <div className="text-xs text-[var(--color-muted-foreground)]">Loading videos...</div>
+                    )}
+
+                    {!mediaLoading && media.length === 0 && (
+                      <p className="text-xs text-[var(--color-muted-foreground)] opacity-50">
+                        No videos linked yet. Try &quot;Re-match Files&quot; or add this performer&apos;s name to your filenames/directories.
+                      </p>
+                    )}
+
+                    {media.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {media.map((item) => (
+                          <MediaCard key={item.id} item={item} onClick={() => setSelected(item)} />
+                        ))}
+                      </div>
+                    )}
+
+                    {mediaPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 mt-4">
+                        <button
+                          onClick={() => setMediaPage((p) => Math.max(1, p - 1))}
+                          disabled={mediaPage <= 1}
+                          className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
+                        >
+                          Prev
+                        </button>
+                        <span className="text-xs text-[var(--color-muted-foreground)]">
+                          {mediaPage} / {mediaPages}
+                        </span>
+                        <button
+                          onClick={() => setMediaPage((p) => Math.min(mediaPages, p + 1))}
+                          disabled={mediaPage >= mediaPages}
+                          className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {!mediaLoading && media.length === 0 && (
-                  <p className="text-xs text-[var(--color-muted-foreground)] opacity-50">
-                    No {mediaType === "video" ? "videos" : "images"} linked yet. Try &quot;Re-match Files&quot; or add this performer&apos;s name to your filenames/directories.
-                  </p>
-                )}
+                {/* Galleries tab */}
+                {activeTab === "gallery" && (
+                  <>
+                    {galleriesLoading && (
+                      <div className="text-xs text-[var(--color-muted-foreground)]">Loading galleries...</div>
+                    )}
 
-                {media.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                    {media.map((item) => (
-                      <MediaCard key={item.id} item={item} onClick={() => setSelected(item)} />
-                    ))}
-                  </div>
-                )}
+                    {!galleriesLoading && galleries.length === 0 && (
+                      <p className="text-xs text-[var(--color-muted-foreground)] opacity-50">
+                        No galleries found. Make sure gallery folders contain this performer&apos;s name in the path.
+                      </p>
+                    )}
 
-                {mediaPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 mt-4">
-                    <button
-                      onClick={() => setMediaPage((p) => Math.max(1, p - 1))}
-                      disabled={mediaPage <= 1}
-                      className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
-                    >
-                      Prev
-                    </button>
-                    <span className="text-xs text-[var(--color-muted-foreground)]">
-                      {mediaPage} / {mediaPages}
-                    </span>
-                    <button
-                      onClick={() => setMediaPage((p) => Math.min(mediaPages, p + 1))}
-                      disabled={mediaPage >= mediaPages}
-                      className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
+                    {galleries.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {galleries.map((g) => (
+                          <GalleryCard key={g.id} gallery={g} />
+                        ))}
+                      </div>
+                    )}
+
+                    {galleryPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 mt-4">
+                        <button
+                          onClick={() => setGalleryPage((p) => Math.max(1, p - 1))}
+                          disabled={galleryPage <= 1}
+                          className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
+                        >
+                          Prev
+                        </button>
+                        <span className="text-xs text-[var(--color-muted-foreground)]">
+                          {galleryPage} / {galleryPages}
+                        </span>
+                        <button
+                          onClick={() => setGalleryPage((p) => Math.min(galleryPages, p + 1))}
+                          disabled={galleryPage >= galleryPages}
+                          className="px-3 py-1 rounded text-xs border border-[var(--color-border)] hover:bg-[var(--color-muted)] disabled:opacity-30 transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

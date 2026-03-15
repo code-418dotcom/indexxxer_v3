@@ -1,5 +1,5 @@
 import client from "./client";
-import type { PaginatedResponse, Performer, PerformerCreate, PerformerUpdate, MediaItem } from "@/types/api";
+import type { Gallery, PaginatedResponse, Performer, PerformerCreate, PerformerUpdate, MediaItem } from "@/types/api";
 
 export async function listPerformers(params?: {
   page?: number;
@@ -37,6 +37,14 @@ export async function getPerformerMedia(id: string, params?: {
   type?: string;
 }): Promise<PaginatedResponse<MediaItem>> {
   const { data } = await client.get(`/performers/${id}/media`, { params });
+  return data;
+}
+
+export async function getPerformerGalleries(id: string, params?: {
+  page?: number;
+  limit?: number;
+}): Promise<PaginatedResponse<Gallery>> {
+  const { data } = await client.get(`/performers/${id}/galleries`, { params });
   return data;
 }
 

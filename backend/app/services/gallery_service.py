@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.gallery import Gallery, GalleryImage
+from app.models.performer import Performer
 from app.schemas.gallery import GalleryDetailSchema, GalleryImageSchema, GallerySchema
+from app.services.performer_service import _build_match_patterns, _name_matches
 
 
 def _cover_url(gallery: Gallery, api_v1_prefix: str) -> str | None:
@@ -49,6 +53,46 @@ async def list_galleries(
     galleries = result.scalars().all()
 
     return [_to_schema(g, api_v1_prefix) for g in galleries], total
+
+
+async def list_galleries_for_performer(
+    db: AsyncSession,
+    performer_id: str,
+    api_v1_prefix: str,
+    page: int = 1,
+    limit: int = 48,
+) -> tuple[list[GallerySchema], int]:
+    """Find galleries whose file_path matches a performer's name or aliases."""
+    performer = await db.get(Performer, performer_id)
+    if not performer:
+        return [], 0
+
+    patterns = _build_match_patterns(performer)
+    if not patterns:
+        return [], 0
+
+    # Load all galleries and filter in Python (same approach as media matching)
+    result = await db.execute(select(Gallery).order_by(Gallery.filename))
+    all_galleries = result.scalars().all()
+
+    matched = []
+    for g in all_galleries:
+        parts = PurePosixPath(g.file_path).parts
+        for part in parts:
+            found = False
+            for pattern in patterns:
+                if _name_matches(pattern, part):
+                    matched.append(g)
+                    found = True
+                    break
+            if found:
+                break
+
+    total = len(matched)
+    offset = (page - 1) * limit
+    page_items = matched[offset : offset + limit]
+
+    return [_to_schema(g, api_v1_prefix) for g in page_items], total
 
 
 async def get_gallery(
