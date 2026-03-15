@@ -18,7 +18,7 @@ _TIMEOUT = httpx.Timeout(300.0, connect=10.0)  # videos can take a while
 async def is_ready() -> bool:
     """Check if the NSFW tagger server is ready."""
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
             resp = await client.get(f"{settings.nsfw_tagger_url}/ready")
             return resp.status_code == 200
     except Exception:
@@ -44,7 +44,9 @@ async def tag_video(file_path: str) -> dict | None:
                 json=payload,
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            log.info("nsfw_tagger.video_response", path=file_path, keys=list(data.keys()) if isinstance(data, dict) else type(data).__name__, result_type=type(data.get("result")).__name__ if isinstance(data, dict) else "N/A", result_len=len(data.get("result", [])) if isinstance(data, dict) and isinstance(data.get("result"), list) else "N/A", sample=str(data)[:500])
+            return data
     except Exception as exc:
         log.error("nsfw_tagger.video_failed", path=file_path, error=str(exc))
         return None
@@ -67,7 +69,9 @@ async def tag_images(file_paths: list[str]) -> dict | None:
                 json=payload,
             )
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            log.info("nsfw_tagger.image_response", sample=str(data)[:500])
+            return data
     except Exception as exc:
         log.error("nsfw_tagger.images_failed", paths=file_paths, error=str(exc))
         return None
@@ -77,36 +81,64 @@ def extract_tags(result: dict) -> list[tuple[str, str, float]]:
     """
     Parse the tagger response and extract (tag_name, category, confidence) tuples.
 
-    The response contains per-frame data with categories like:
-    {"actions": [["blowjob", 0.95]], "bodyparts": [["Fingers", 0.8]], ...}
+    V3 video format (timespans):
+    {"result": {"schema_version": 3, "timespans": {"actions": {"Blowjob": [...], ...}}}, "metrics": {...}}
 
-    We aggregate across all frames, keeping the max confidence per tag.
+    V1 video format (per-frame):
+    {"result": [{"frame_index": 2.0, "actions": [["Blowjob", 0.95]], ...}]}
+
+    V3 image format:
+    {"result": [{"actions": [["Kissing", 0.8]], ...}], "metrics": {...}}
     """
-    tag_map: dict[tuple[str, str], float] = {}  # (name, category) -> max_confidence
+    tag_map: dict[tuple[str, str], float] = {}
 
-    # Handle both video (list of frame results) and image (single result) formats
     raw = result.get("result", result)
 
-    # Normalize to list
-    frames = raw if isinstance(raw, list) else [raw]
-
-    for frame in frames:
-        if not isinstance(frame, dict):
-            continue
-        for category in ("actions", "bdsm", "bodyparts", "positions"):
-            items = frame.get(category, [])
-            if not isinstance(items, list):
+    # ── V3 video format: timespans ──────────────────────────────────────────
+    if isinstance(raw, dict) and "timespans" in raw:
+        timespans = raw["timespans"]
+        for category, tags_dict in timespans.items():
+            if not isinstance(tags_dict, dict):
                 continue
-            for item in items:
-                if isinstance(item, list) and len(item) >= 2:
-                    name, confidence = str(item[0]).strip().lower(), float(item[1])
-                elif isinstance(item, str):
-                    name, confidence = item.strip().lower(), 1.0
-                else:
+            for tag_name, spans in tags_dict.items():
+                if not isinstance(spans, list) or not spans:
                     continue
+                name = tag_name.strip().lower()
                 if not name:
                     continue
+                # Confidence: use max from spans if available, otherwise 1.0
+                confidences = [
+                    s.get("confidence", 1.0) or 1.0
+                    for s in spans
+                    if isinstance(s, dict)
+                ]
+                confidence = max(confidences) if confidences else 1.0
                 key = (name, category)
                 tag_map[key] = max(tag_map.get(key, 0.0), confidence)
+
+        log.info("nsfw_tagger.v3_timespans_parsed", tags_found=len(tag_map))
+
+    else:
+        # ── V1 / image format: per-frame arrays ────────────────────────────
+        frames = raw if isinstance(raw, list) else [raw]
+
+        for frame in frames:
+            if not isinstance(frame, dict):
+                continue
+            for category in ("actions", "bdsm", "bodyparts", "positions"):
+                items = frame.get(category, [])
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if isinstance(item, list) and len(item) >= 2:
+                        name, confidence = str(item[0]).strip().lower(), float(item[1])
+                    elif isinstance(item, str):
+                        name, confidence = item.strip().lower(), 1.0
+                    else:
+                        continue
+                    if not name:
+                        continue
+                    key = (name, category)
+                    tag_map[key] = max(tag_map.get(key, 0.0), confidence)
 
     return [(name, cat, conf) for (name, cat), conf in tag_map.items()]

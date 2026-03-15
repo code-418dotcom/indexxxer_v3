@@ -48,6 +48,8 @@ celery_app.config_from_object(
             "app.workers.tasks.ai.backfill_ai_task": {"queue": "ai"},
             "app.workers.tasks.webhook.*": {"queue": "webhooks"},
             "app.workers.tasks.performer.*": {"queue": "indexing"},
+            "app.workers.tasks.nsfw_tag.*": {"queue": "ai"},
+            "app.workers.tasks.phash.*": {"queue": "hashing"},
         },
         "task_default_queue": "indexing",
         # Time limits — thumbnail tasks enforce their own via decorator args
@@ -89,6 +91,8 @@ celery_app.autodiscover_tasks(
         "app.workers.tasks.webhook",
         "app.workers.tasks.analytics",
         "app.workers.tasks.performer",
+        "app.workers.tasks.nsfw_tag",
+        "app.workers.tasks.phash",
     ],
     force=True,
 )
