@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
     settings.thumbnail_root_path.mkdir(parents=True, exist_ok=True)
     log.info("thumbnail_root.ready", path=settings.thumbnail_root)
 
+    # Ensure performer image directory exists
+    from app.services.storage_service import get_performer_image_dir
+    get_performer_image_dir().mkdir(parents=True, exist_ok=True)
+
     # Seed admin user if no users exist (silently skip if DB not yet migrated)
     try:
         from app.database import AsyncSessionLocal
@@ -82,6 +86,7 @@ def create_app() -> FastAPI:
     from app.routers import (
         analytics,
         auth,
+        duplicates,
         export,
         faces,
         filters,
@@ -89,6 +94,7 @@ def create_app() -> FastAPI:
         jobs,
         media,
         pdfs,
+        performers,
         search,
         sources,
         stream,
@@ -108,11 +114,13 @@ def create_app() -> FastAPI:
     app.include_router(stream.router,    prefix=settings.api_v1_prefix)
     app.include_router(filters.router,   prefix=settings.api_v1_prefix)
     app.include_router(export.router,    prefix=settings.api_v1_prefix)
+    app.include_router(performers.router, prefix=settings.api_v1_prefix)
     app.include_router(faces.router,     prefix=settings.api_v1_prefix)
     app.include_router(galleries.router, prefix=settings.api_v1_prefix)
     app.include_router(pdfs.router,      prefix=settings.api_v1_prefix)
     app.include_router(workers.router,   prefix=settings.api_v1_prefix)
     app.include_router(webhooks.router,  prefix=settings.api_v1_prefix)
+    app.include_router(duplicates.router, prefix=settings.api_v1_prefix)
     app.include_router(analytics.router, prefix=settings.api_v1_prefix)
 
     # ── GraphQL ───────────────────────────────────────────────────────────────

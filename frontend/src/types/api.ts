@@ -86,6 +86,65 @@ export interface MediaItem {
   summary?: string;
   summary_status: AiStatus;
   face_count: number;
+  performers: PerformerRef[];
+}
+
+// ─── Performers ────────────────────────────────────────────────────────────
+
+export interface PerformerRef {
+  id: string;
+  name: string;
+  slug: string;
+  profile_image_url?: string;
+  match_source: "manual" | "filename" | "directory";
+  confidence: number;
+}
+
+export interface Performer {
+  id: string;
+  name: string;
+  slug: string;
+  aliases?: string[];
+  bio?: string;
+  birthdate?: string;
+  birthplace?: string;
+  nationality?: string;
+  ethnicity?: string;
+  hair_color?: string;
+  eye_color?: string;
+  height?: string;
+  weight?: string;
+  measurements?: string;
+  years_active?: string;
+  profile_image_url?: string;
+  freeones_url?: string;
+  scraped_at?: string;
+  media_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PerformerCreate {
+  name: string;
+  aliases?: string[];
+  freeones_url?: string;
+}
+
+export interface PerformerUpdate {
+  name?: string;
+  aliases?: string[];
+  bio?: string;
+  birthdate?: string;
+  birthplace?: string;
+  nationality?: string;
+  ethnicity?: string;
+  hair_color?: string;
+  eye_color?: string;
+  height?: string;
+  weight?: string;
+  measurements?: string;
+  years_active?: string;
+  freeones_url?: string;
 }
 
 // ─── Faces ──────────────────────────────────────────────────────────────────

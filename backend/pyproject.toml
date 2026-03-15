@@ -57,6 +57,12 @@ dependencies = [
 
     # PDF rendering
     "pymupdf>=1.24",
+
+    # Performer scraping (Freeones)
+    "playwright>=1.40",
+
+    # Perceptual hashing (duplicate detection)
+    "imagehash>=4.3",
 ]
 
 [project.optional-dependencies]

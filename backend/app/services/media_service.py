@@ -14,6 +14,7 @@ from app.core.exceptions import not_found
 from app.core.pagination import PaginationParams, paginate
 from app.models.media_face import MediaFace
 from app.models.media_item import MediaItem
+from app.models.performer import MediaPerformer, Performer
 from app.models.tag import MediaTag, Tag
 from app.schemas.media_item import (
     BulkActionRequest,
@@ -23,16 +24,18 @@ from app.schemas.media_item import (
     MediaItemSummary,
 )
 from app.schemas.tag import TagRef
+from app.services.performer_service import build_performer_refs
 from app.services.storage_service import make_thumbnail_url
 
 log = structlog.get_logger(__name__)
 
 # Reusable eager-load option: media_items → media_tags → tags
 WITH_TAGS = [selectinload(MediaItem.media_tags).selectinload(MediaTag.tag)]
-# Includes face rows for face_count
+# Includes face rows for face_count and performer refs
 WITH_TAGS_AND_FACES = [
     selectinload(MediaItem.media_tags).selectinload(MediaTag.tag),
     selectinload(MediaItem.faces),
+    selectinload(MediaItem.media_performers).selectinload(MediaPerformer.performer),
 ]
 
 
@@ -60,6 +63,10 @@ def to_media_summary(item: MediaItem) -> MediaItemSummary:
         face_count = len(item.faces)
     except Exception:
         face_count = 0
+    try:
+        performers = build_performer_refs(item.media_performers)
+    except Exception:
+        performers = []
     return MediaItemSummary(
         id=item.id,
         source_id=item.source_id,
@@ -82,6 +89,8 @@ def to_media_summary(item: MediaItem) -> MediaItemSummary:
         transcript_status=item.transcript_status,
         summary_status=item.summary_status,
         face_count=face_count,
+        performers=performers,
+        duplicate_group=item.duplicate_group,
     )
 
 
@@ -99,6 +108,7 @@ def to_media_detail(item: MediaItem) -> MediaItemDetail:
         updated_at=item.updated_at,
         transcript=item.transcript,
         summary=item.summary,
+        perceptual_hash=item.perceptual_hash,
     )
 
 
@@ -160,6 +170,7 @@ async def list_media(
     media_type: str | None = None,
     source_id: str | None = None,
     tag_ids: list[str] | None = None,
+    performer_id: str | None = None,
     status: str | None = None,
     favourite: bool | None = None,
     sort: str = "date",
@@ -182,6 +193,14 @@ async def list_media(
                     select(MediaTag.media_id).where(MediaTag.tag_id == tid)
                 )
             )
+    if performer_id:
+        stmt = stmt.where(
+            MediaItem.id.in_(
+                select(MediaPerformer.media_id).where(
+                    MediaPerformer.performer_id == performer_id
+                )
+            )
+        )
 
     stmt = _apply_sort(stmt, sort, order)
 

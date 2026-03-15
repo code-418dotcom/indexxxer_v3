@@ -23,6 +23,9 @@ RUN uv sync --no-install-project --no-dev
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
+# Install Playwright Chromium for performer scraping
+RUN playwright install --with-deps chromium
+
 # ── development target ─────────────────────────────────────────────────────────
 # Source code is mounted at /app via docker-compose volume; no COPY needed.
 FROM base AS dev

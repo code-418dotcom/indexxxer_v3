@@ -10,6 +10,7 @@ x-backend: &backend
     - ../backend:/app                            # hot reload: source mounted at runtime
     - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro      # media library, read-only
     - thumbnails:/data/thumbnails                # generated thumbnails
+    - performers:/data/performers                # performer profile images
   depends_on:
     db:
       condition: service_healthy
@@ -156,4 +157,10 @@ volumes:
       type: none
       o: bind
       device: ${THUMBNAIL_ROOT:-../data/thumbnails}
+  performers:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PERFORMERS_ROOT:-../data/performers}
   frontend_next:

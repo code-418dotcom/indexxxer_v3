@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.performer import PerformerRef
 from app.schemas.tag import TagRef
 
 
@@ -33,6 +34,8 @@ class MediaItemSummary(BaseModel):
     transcript_status: str = "pending"
     summary_status: str = "pending"
     face_count: int = 0
+    performers: list[PerformerRef] = []
+    duplicate_group: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -51,6 +54,7 @@ class MediaItemDetail(MediaItemSummary):
     # M3: full text fields (omitted from list view for bandwidth)
     transcript: str | None = None
     summary: str | None = None
+    perceptual_hash: str | None = None
 
 
 class TagOp(BaseModel):

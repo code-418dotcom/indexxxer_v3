@@ -43,6 +43,8 @@ class MediaItem(Base, TimestampMixin):
         Index("idx_media_status", "index_status"),
         Index("idx_media_mtime", "file_mtime"),
         Index("idx_media_indexed_at", "indexed_at"),
+        Index("idx_media_phash", "perceptual_hash"),
+        Index("idx_media_dupgroup", "duplicate_group"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
@@ -131,6 +133,10 @@ class MediaItem(Base, TimestampMixin):
         String(20), nullable=False, default="pending"
     )
 
+    # ── Deduplication ──────────────────────────────────────────────────────
+    perceptual_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    duplicate_group: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # ── Relationships ────────────────────────────────────────────────────────
     source: Mapped["MediaSource"] = relationship(  # noqa: F821
         back_populates="media_items", lazy="noload"
@@ -139,5 +145,8 @@ class MediaItem(Base, TimestampMixin):
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )
     faces: Mapped[list["MediaFace"]] = relationship(  # noqa: F821
+        back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
+    )
+    media_performers: Mapped[list["MediaPerformer"]] = relationship(  # noqa: F821
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )

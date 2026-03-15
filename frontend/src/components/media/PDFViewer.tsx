@@ -85,14 +85,14 @@ export function PDFViewer({ pdf, initialPage = 0, onClose }: PDFViewerProps) {
         <button
           onClick={prev}
           disabled={page === 0}
-          className="absolute left-3 z-10 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+          className="absolute left-1 md:left-3 z-10 p-1 md:p-2 rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
           title="Previous page (←)"
         >
           <ChevronLeft className="w-6 h-6" />
         </button>
 
         {/* Page image */}
-        <div className="flex items-center justify-center w-full h-full px-16 py-4">
+        <div className="flex items-center justify-center w-full h-full px-2 md:px-16 py-2 md:py-4">
           {!loaded && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -105,7 +105,7 @@ export function PDFViewer({ pdf, initialPage = 0, onClose }: PDFViewerProps) {
             alt={`Page ${page + 1}`}
             onLoad={() => setLoaded(true)}
             className="max-w-full max-h-full object-contain shadow-2xl"
-            style={{ maxHeight: "calc(100vh - 120px)", opacity: loaded ? 1 : 0, transition: "opacity 0.15s" }}
+            style={{ maxHeight: "calc(100vh - 90px)", opacity: loaded ? 1 : 0, transition: "opacity 0.15s" }}
           />
         </div>
 
@@ -113,7 +113,7 @@ export function PDFViewer({ pdf, initialPage = 0, onClose }: PDFViewerProps) {
         <button
           onClick={next}
           disabled={page === pdf.page_count - 1}
-          className="absolute right-3 z-10 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+          className="absolute right-1 md:right-3 z-10 p-1 md:p-2 rounded-full bg-black/60 text-white hover:bg-black/80 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
           title="Next page (→)"
         >
           <ChevronRight className="w-6 h-6" />

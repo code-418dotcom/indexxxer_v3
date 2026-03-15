@@ -10,11 +10,13 @@ interface UIState {
   viewMode: ViewMode;
   thumbnailSize: ThumbnailSize;
   sidebarCollapsed: boolean;
+  mobileMenuOpen: boolean;
   setViewMode: (m: ViewMode) => void;
   toggleView: () => void;
   setThumbnailSize: (s: ThumbnailSize) => void;
   setSidebarCollapsed: (c: boolean) => void;
   toggleSidebar: () => void;
+  setMobileMenuOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -23,6 +25,7 @@ export const useUIStore = create<UIState>()(
       viewMode: "grid",
       thumbnailSize: "md",
       sidebarCollapsed: false,
+      mobileMenuOpen: false,
 
       setViewMode: (viewMode) => set({ viewMode }),
       toggleView: () =>
@@ -31,6 +34,7 @@ export const useUIStore = create<UIState>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       toggleSidebar: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setMobileMenuOpen: (mobileMenuOpen) => set({ mobileMenuOpen }),
     }),
     {
       name: "indexxxer-ui",

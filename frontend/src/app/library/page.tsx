@@ -138,7 +138,7 @@ export default function LibraryPage() {
   return (
     <div className="flex flex-col h-full">
       <Topbar title={filters.favourite ? "Favourites" : filters.type === "image" ? "Images" : filters.type === "video" ? "Videos" : "Library"}>
-        <div className="flex items-center gap-2 max-w-2xl">
+        <div className="flex items-center gap-2 max-w-2xl min-w-0">
           <SearchBar
             value={query}
             onChange={(v) => setQuery(v)}
@@ -172,7 +172,7 @@ export default function LibraryPage() {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4">
             {isLoading && items.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 gap-3 text-[var(--color-muted-foreground)]">
                 <Loader2 className="w-8 h-8 animate-spin" />

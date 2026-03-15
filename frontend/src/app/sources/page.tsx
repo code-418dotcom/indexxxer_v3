@@ -14,6 +14,7 @@ import { cn, formatDate, formatRelative } from "@/lib/utils";
 import type { MediaSource, SourceCreate } from "@/types/api";
 import {
   CheckCircle2,
+  Copy,
   FolderOpen,
   Loader2,
   Play,
@@ -22,6 +23,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 
 export default function SourcesPage() {
   const [showAdd, setShowAdd] = useState(false);
@@ -66,13 +68,22 @@ export default function SourcesPage() {
               Add the paths you want indexxxer to scan and index.
             </p>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(217_91%_60%)] hover:bg-[hsl(217_91%_55%)] text-white text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add source
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/duplicates"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--color-border)] hover:border-[hsl(217_33%_30%)] hover:bg-[var(--color-muted)] text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] transition-all"
+            >
+              <Copy className="w-4 h-4" />
+              Duplicates
+            </Link>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(217_91%_60%)] hover:bg-[hsl(217_91%_55%)] text-white text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add source
+            </button>
+          </div>
         </div>
 
         {showAdd && (

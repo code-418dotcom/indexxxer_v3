@@ -406,6 +406,26 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         countdown=5,  # small delay to let thumbnail task finish first
     )
 
+    # ── Perceptual hash (duplicate detection) ────────────────────────────────
+    from app.workers.tasks.phash import compute_phash_task
+    compute_phash_task.apply_async(
+        kwargs={"media_item_id": media_item_id},
+        queue="hashing",
+        countdown=8,  # wait for thumbnail to be generated
+    )
+
+    # ── Performer auto-matching ──────────────────────────────────────────────
+    from app.workers.tasks.performer import match_media_performers_task
+    match_media_performers_task.apply_async(
+        kwargs={
+            "media_id": media_item_id,
+            "filename": fpath.name,
+            "file_path": file_path,
+        },
+        queue="indexing",
+        countdown=2,
+    )
+
     # ── M3 AI tasks (after thumbnail is ready) ────────────────────────────────
     if meta.media_type == "image":
         compute_caption_task.apply_async(
