@@ -32,6 +32,7 @@ import {
   uploadPerformerImage,
 } from "@/lib/api/performers";
 import { galleryCoverUrl, galleryImageUrl, getGallery } from "@/lib/api/galleries";
+import { GalleryLightbox } from "@/components/media/GalleryLightbox";
 import { thumbnailUrl } from "@/lib/api/media";
 import { formatBytes } from "@/lib/utils";
 import type { Gallery, GalleryDetail, MediaItem } from "@/types/api";
@@ -94,12 +95,12 @@ function MediaCard({ item, onClick, onSetProfile }: { item: MediaItem; onClick: 
 
 // ── Gallery card ────────────────────────────────────────────────────────────
 
-function GalleryCard({ gallery, onPickImage }: { gallery: Gallery; onPickImage: (galleryId: string) => void }) {
+function GalleryCard({ gallery, onPickImage, onOpen }: { gallery: Gallery; onPickImage: (galleryId: string) => void; onOpen: (galleryId: string) => void }) {
   const cover = gallery.cover_url ? galleryCoverUrl(gallery.id) : null;
 
   return (
     <div className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all">
-      <a href={`/galleries/${gallery.id}`} className="cursor-pointer">
+      <div onClick={() => onOpen(gallery.id)} className="cursor-pointer">
         <div className="relative w-full aspect-square bg-[var(--color-muted)]">
           {cover ? (
             <Image
@@ -118,7 +119,7 @@ function GalleryCard({ gallery, onPickImage }: { gallery: Gallery; onPickImage: 
             {gallery.image_count} images
           </span>
         </div>
-      </a>
+      </div>
       <div className="px-2 py-1.5 flex items-center justify-between gap-1">
         <div className="min-w-0">
           <p className="text-[11px] text-[var(--color-foreground)] truncate" title={gallery.filename}>
@@ -155,6 +156,8 @@ export default function PerformerDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [pickingGallery, setPickingGallery] = useState<string | null>(null);
+  const [viewingGallery, setViewingGallery] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [imgVersion, setImgVersion] = useState(0);
   const [imageUrl, setImageUrl] = useState("");
 
@@ -215,6 +218,12 @@ export default function PerformerDetailPage() {
     queryKey: ["gallery-detail", pickingGallery],
     queryFn: () => getGallery(pickingGallery!),
     enabled: !!pickingGallery,
+  });
+
+  const { data: viewGalleryDetail } = useQuery({
+    queryKey: ["gallery-detail", viewingGallery],
+    queryFn: () => getGallery(viewingGallery!),
+    enabled: !!viewingGallery,
   });
 
   const setFromUrl = useMutation({
@@ -540,7 +549,12 @@ export default function PerformerDetailPage() {
                     {galleries.length > 0 && (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {galleries.map((g) => (
-                          <GalleryCard key={g.id} gallery={g} onPickImage={setPickingGallery} />
+                          <GalleryCard
+                            key={g.id}
+                            gallery={g}
+                            onPickImage={setPickingGallery}
+                            onOpen={(gid) => { setViewingGallery(gid); setLightboxIndex(0); }}
+                          />
                         ))}
                       </div>
                     )}
@@ -580,6 +594,17 @@ export default function PerformerDetailPage() {
       )}
       {selected && selected.media_type === "video" && (
         <VideoOverlay item={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* Gallery lightbox */}
+      {viewingGallery && viewGalleryDetail && (
+        <GalleryLightbox
+          galleryId={viewingGallery}
+          images={viewGalleryDetail.images}
+          index={lightboxIndex}
+          onClose={() => setViewingGallery(null)}
+          onNavigate={setLightboxIndex}
+        />
       )}
 
       {/* Gallery image picker overlay */}

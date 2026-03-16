@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import {
   Archive,
   BarChart2,
+  Download,
   FileText,
   Film,
   FolderOpen,
@@ -34,6 +35,7 @@ const NAV = [
   { href: "/tags",      label: "Tags",      Icon: Tag        },
   { href: "/galleries", label: "Galleries", Icon: Archive    },
   { href: "/pdfs",      label: "PDFs",      Icon: FileText   },
+  { href: "/downloader",label: "Downloader", Icon: Download   },
   { href: "/sources",   label: "Sources",   Icon: FolderOpen },
   { href: "/logs",      label: "Logs",      Icon: ScrollText },
   { href: "/settings",  label: "Settings",  Icon: Settings   },

@@ -86,6 +86,7 @@ def create_app() -> FastAPI:
     from app.routers import (
         analytics,
         auth,
+        downloader,
         duplicates,
         export,
         faces,
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(workers.router,   prefix=settings.api_v1_prefix)
     app.include_router(webhooks.router,  prefix=settings.api_v1_prefix)
     app.include_router(duplicates.router, prefix=settings.api_v1_prefix)
+    app.include_router(downloader.router, prefix=settings.api_v1_prefix)
     app.include_router(analytics.router, prefix=settings.api_v1_prefix)
 
     # ── GraphQL ───────────────────────────────────────────────────────────────

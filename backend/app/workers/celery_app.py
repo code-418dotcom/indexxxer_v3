@@ -48,6 +48,7 @@ celery_app.config_from_object(
             "app.workers.tasks.ai.backfill_ai_task": {"queue": "ai"},
             "app.workers.tasks.webhook.*": {"queue": "webhooks"},
             "app.workers.tasks.performer.*": {"queue": "indexing"},
+            "app.workers.tasks.downloader.*": {"queue": "indexing"},
             "app.workers.tasks.nsfw_tag.*": {"queue": "ai"},
             "app.workers.tasks.phash.*": {"queue": "hashing"},
         },
@@ -93,6 +94,7 @@ celery_app.autodiscover_tasks(
         "app.workers.tasks.performer",
         "app.workers.tasks.nsfw_tag",
         "app.workers.tasks.phash",
+        "app.workers.tasks.downloader",
     ],
     force=True,
 )

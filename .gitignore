@@ -55,3 +55,4 @@ desktop.ini
 
 # Gemini local cache
 .gemini_cache_id
+infra/vpn/auth.txt

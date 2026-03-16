@@ -369,21 +369,20 @@ async def set_image_from_url(
     url: str = Query(...),
 ):
     """Download an image from a URL and set it as the performer's profile image."""
-    import httpx
+    import urllib.request
 
     p = await db.get(Performer, performer_id)
     if not p:
         raise not_found("Performer", performer_id)
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            content_type = resp.headers.get("content-type", "")
-            if not content_type.startswith("image/"):
-                raise bad_request(f"URL does not point to an image (got {content_type})")
-            image_data = resp.content
-    except httpx.HTTPError as e:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        })
+        resp = urllib.request.urlopen(req, timeout=30)
+        image_data = resp.read()
+    except Exception as e:
+        log.error("performer.image_from_url_failed", url=url, error=str(e), error_type=type(e).__name__)
         raise bad_request(f"Failed to download image: {e}")
 
     dest = get_performer_image_path(performer_id)

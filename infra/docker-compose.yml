@@ -8,7 +8,7 @@ x-backend: &backend
   env_file: ../.env
   volumes:
     - ../backend:/app                            # hot reload: source mounted at runtime
-    - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro      # media library, read-only
+    - ${MEDIA_ROOT:-/mnt/e/media}:/media           # media library (rw for downloader)
     - thumbnails:/data/thumbnails                # generated thumbnails
     - performers:/data/performers                # performer profile images
   depends_on:
@@ -18,6 +18,31 @@ x-backend: &backend
       condition: service_healthy
 
 services:
+
+  # ── OpenVPN sidecar ────────────────────────────────────────────────────────
+  # All outbound traffic from backend + worker is routed through this VPN.
+  vpn:
+    image: dperson/openvpn-client
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ./vpn:/vpn:ro
+    environment:
+      - FIREWALL=  # disable killswitch so local network still works
+    ports:
+      - "8000:8000"   # backend API (exposed through VPN container)
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ping", "-c", "1", "-W", "3", "1.1.1.1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
   db:
@@ -76,7 +101,6 @@ services:
         --queues=indexing,thumbnails,hashing,ai,webhooks
         --concurrency=4
         --hostname=worker@%h
-    # No external port — worker communicates via Redis only
 
   # ── GPU Celery worker (CLIP embeddings) ───────────────────────────────────────
   # Requires NVIDIA Container Toolkit on the host.
@@ -122,7 +146,6 @@ services:
         --loglevel=info
         --scheduler celery.beat.PersistentScheduler
         --schedule /tmp/celerybeat-schedule
-    # No external port — communicates via Redis only
 
   # ── Next.js frontend ──────────────────────────────────────────────────────────
   frontend:
