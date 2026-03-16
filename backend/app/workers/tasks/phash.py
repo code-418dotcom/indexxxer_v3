@@ -23,7 +23,7 @@ from app.workers.db import task_session
 
 log = structlog.get_logger(__name__)
 
-HAMMING_THRESHOLD = 8  # max hamming distance to consider as duplicate
+HAMMING_THRESHOLD = 4  # max hamming distance to consider as duplicate (strict — avoids false positives from similar studio branding)
 
 
 def _compute_phash(thumbnail_path: str) -> str:

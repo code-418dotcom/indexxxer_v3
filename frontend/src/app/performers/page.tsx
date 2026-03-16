@@ -55,7 +55,7 @@ function PerformerCard({ performer }: { performer: Performer }) {
       <div className="relative w-full aspect-[3/4] bg-[var(--color-muted)]">
         {performer.profile_image_url ? (
           <Image
-            src={performerImageUrl(performer.id)}
+            src={`${performerImageUrl(performer.id)}?v=${performer.updated_at}`}
             alt={performer.name}
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
@@ -66,10 +66,19 @@ function PerformerCard({ performer }: { performer: Performer }) {
             <UserCircle className="w-16 h-16 text-[var(--color-muted-foreground)] opacity-30" />
           </div>
         )}
-        {performer.media_count > 0 && (
-          <span className="absolute bottom-1.5 right-1.5 text-[10px] font-semibold bg-black/70 text-white px-1.5 py-0.5 rounded">
-            {performer.media_count} {performer.media_count === 1 ? "video" : "videos"}
-          </span>
+        {(performer.video_count > 0 || performer.gallery_count > 0) && (
+          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+            {performer.video_count > 0 && (
+              <span className="text-[10px] font-semibold bg-black/70 text-white px-1.5 py-0.5 rounded">
+                {performer.video_count} {performer.video_count === 1 ? "video" : "videos"}
+              </span>
+            )}
+            {performer.gallery_count > 0 && (
+              <span className="text-[10px] font-semibold bg-black/70 text-emerald-300 px-1.5 py-0.5 rounded">
+                {performer.gallery_count} {performer.gallery_count === 1 ? "gallery" : "galleries"}
+              </span>
+            )}
+          </div>
         )}
       </div>
       <div className="px-2.5 py-2">

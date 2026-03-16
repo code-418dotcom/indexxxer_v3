@@ -10,6 +10,8 @@ import asyncio
 import json
 import shutil
 import uuid
+import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -23,6 +25,7 @@ from app.core.exceptions import bad_request, not_found
 from app.core.pagination import PaginatedResponse, PaginationParams, paginate
 from app.core.security import decode_token
 from app.database import get_db
+from app.models.media_item import MediaItem
 from app.models.performer import Performer
 from app.schemas.media_item import MediaItemSummary
 from app.schemas.performer import (
@@ -294,9 +297,142 @@ async def upload_performer_image(
         shutil.copyfileobj(file.file, f)
 
     p.profile_image_path = str(dest)
+    p.updated_at = datetime.now(timezone.utc)
     await db.flush()
     await db.refresh(p)
     return performer_service.to_performer_response(p)
+
+
+@router.post("/{performer_id}/image/from-gallery", response_model=PerformerResponse)
+async def set_image_from_gallery(
+    performer_id: str,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+    gallery_id: str = Query(...),
+    image_index: int = Query(..., ge=0),
+):
+    """Set a performer's profile image from a gallery image (by gallery ID + image index)."""
+    from app.models.gallery import Gallery, GalleryImage
+    from sqlalchemy import select
+
+    p = await db.get(Performer, performer_id)
+    if not p:
+        raise not_found("Performer", performer_id)
+
+    gallery = await db.get(Gallery, gallery_id)
+    if not gallery:
+        raise not_found("Gallery", gallery_id)
+
+    result = await db.execute(
+        select(GalleryImage)
+        .where(GalleryImage.gallery_id == gallery_id, GalleryImage.index_order == image_index)
+    )
+    img_entry = result.scalar_one_or_none()
+    if not img_entry:
+        raise not_found("Gallery image", str(image_index))
+
+    # Read image data from ZIP or folder
+    is_zip = gallery.file_path.lower().endswith(".zip")
+    if is_zip:
+        try:
+            with zipfile.ZipFile(gallery.file_path, "r") as zf:
+                image_data = zf.read(img_entry.filename)
+        except (KeyError, zipfile.BadZipFile, OSError) as e:
+            raise bad_request(f"Cannot read image from ZIP: {e}")
+    else:
+        try:
+            with open(img_entry.filename, "rb") as f:
+                image_data = f.read()
+        except OSError as e:
+            raise bad_request(f"Cannot read image: {e}")
+
+    # Save as performer profile image
+    dest = get_performer_image_path(performer_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(image_data)
+
+    p.profile_image_path = str(dest)
+    p.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(p)
+    counts = await performer_service._get_performer_counts(db, [performer_id])
+    vc, gc = counts.get(performer_id, (0, 0))
+    return performer_service.to_performer_response(p, video_count=vc, gallery_count=gc)
+
+
+@router.post("/{performer_id}/image/from-url", response_model=PerformerResponse)
+async def set_image_from_url(
+    performer_id: str,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+    url: str = Query(...),
+):
+    """Download an image from a URL and set it as the performer's profile image."""
+    import httpx
+
+    p = await db.get(Performer, performer_id)
+    if not p:
+        raise not_found("Performer", performer_id)
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            if not content_type.startswith("image/"):
+                raise bad_request(f"URL does not point to an image (got {content_type})")
+            image_data = resp.content
+    except httpx.HTTPError as e:
+        raise bad_request(f"Failed to download image: {e}")
+
+    dest = get_performer_image_path(performer_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(image_data)
+
+    p.profile_image_path = str(dest)
+    p.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(p)
+    counts = await performer_service._get_performer_counts(db, [performer_id])
+    vc, gc = counts.get(performer_id, (0, 0))
+    return performer_service.to_performer_response(p, video_count=vc, gallery_count=gc)
+
+
+@router.post("/{performer_id}/image/from-thumbnail", response_model=PerformerResponse)
+async def set_image_from_thumbnail(
+    performer_id: str,
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+    media_id: str = Query(...),
+):
+    """Set a performer's profile image from a media item's thumbnail."""
+    from app.services.storage_service import get_thumbnail_path
+
+    p = await db.get(Performer, performer_id)
+    if not p:
+        raise not_found("Performer", performer_id)
+
+    item = await db.get(MediaItem, media_id)
+    if not item:
+        raise not_found("MediaItem", media_id)
+
+    thumb_path = get_thumbnail_path(item)
+    if not thumb_path:
+        raise bad_request("Media item has no thumbnail")
+
+    dest = get_performer_image_path(performer_id)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(thumb_path), str(dest))
+
+    p.profile_image_path = str(dest)
+    p.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(p)
+    counts = await performer_service._get_performer_counts(db, [performer_id])
+    vc, gc = counts.get(performer_id, (0, 0))
+    return performer_service.to_performer_response(p, video_count=vc, gallery_count=gc)
 
 
 # ── Scrape single ────────────────────────────────────────────────────────────

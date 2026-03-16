@@ -34,7 +34,12 @@ def slugify(name: str) -> str:
 
 # ── Conversion helpers ───────────────────────────────────────────────────────
 
-def to_performer_response(p: Performer) -> PerformerResponse:
+def to_performer_response(
+    p: Performer,
+    *,
+    video_count: int = 0,
+    gallery_count: int = 0,
+) -> PerformerResponse:
     return PerformerResponse(
         id=p.id,
         name=p.name,
@@ -55,9 +60,66 @@ def to_performer_response(p: Performer) -> PerformerResponse:
         freeones_url=p.freeones_url,
         scraped_at=p.scraped_at,
         media_count=p.media_count,
+        video_count=video_count,
+        gallery_count=gallery_count,
         created_at=p.created_at,
         updated_at=p.updated_at,
     )
+
+
+async def _get_performer_counts(
+    db: AsyncSession, performer_ids: list[str]
+) -> dict[str, tuple[int, int]]:
+    """Return {performer_id: (video_count, gallery_count)} for a batch of performers."""
+    if not performer_ids:
+        return {}
+
+    # Video count: count media_performers where media_type = 'video'
+    video_stmt = (
+        select(
+            MediaPerformer.performer_id,
+            func.count(MediaPerformer.media_id),
+        )
+        .join(MediaItem, MediaItem.id == MediaPerformer.media_id)
+        .where(
+            MediaPerformer.performer_id.in_(performer_ids),
+            MediaItem.media_type == "video",
+        )
+        .group_by(MediaPerformer.performer_id)
+    )
+    video_rows = (await db.execute(video_stmt)).all()
+    video_map = {pid: cnt for pid, cnt in video_rows}
+
+    # Gallery count: count matching galleries per performer (via path matching)
+    # This is done per-performer using the gallery_service helper, cached for the batch
+    from app.models.gallery import Gallery
+
+    all_galleries = (await db.execute(select(Gallery.file_path))).all()
+    gallery_paths = [r[0] for r in all_galleries]
+
+    performers = (
+        await db.execute(select(Performer).where(Performer.id.in_(performer_ids)))
+    ).scalars().all()
+
+    gallery_map: dict[str, int] = {}
+    for p in performers:
+        patterns = _build_match_patterns(p)
+        if not patterns:
+            gallery_map[p.id] = 0
+            continue
+        count = 0
+        for gpath in gallery_paths:
+            parts = PurePosixPath(gpath).parts
+            for part in parts:
+                if any(_name_matches(pat, part) for pat in patterns):
+                    count += 1
+                    break
+        gallery_map[p.id] = count
+
+    return {
+        pid: (video_map.get(pid, 0), gallery_map.get(pid, 0))
+        for pid in performer_ids
+    }
 
 
 def build_performer_refs(media_performers: list[MediaPerformer]) -> list[PerformerRef]:
@@ -109,8 +171,21 @@ async def list_performers(
         await db.execute(stmt.offset(params.offset).limit(params.limit))
     ).scalars().all()
 
+    # Batch-compute video and gallery counts
+    pids = [p.id for p in performers]
+    counts = await _get_performer_counts(db, pids)
+
     return paginate(
-        [to_performer_response(p) for p in performers], total, params
+        [
+            to_performer_response(
+                p,
+                video_count=counts.get(p.id, (0, 0))[0],
+                gallery_count=counts.get(p.id, (0, 0))[1],
+            )
+            for p in performers
+        ],
+        total,
+        params,
     )
 
 
@@ -118,7 +193,9 @@ async def get_performer(db: AsyncSession, performer_id: str) -> PerformerRespons
     p = await db.get(Performer, performer_id)
     if not p:
         raise not_found("Performer", performer_id)
-    return to_performer_response(p)
+    counts = await _get_performer_counts(db, [performer_id])
+    vc, gc = counts.get(performer_id, (0, 0))
+    return to_performer_response(p, video_count=vc, gallery_count=gc)
 
 
 async def get_performer_by_slug(db: AsyncSession, slug: str) -> Performer | None:

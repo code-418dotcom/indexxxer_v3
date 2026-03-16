@@ -64,6 +64,8 @@ class PerformerResponse(PerformerBase):
     freeones_url: str | None = None
     scraped_at: datetime | None = None
     media_count: int = 0
+    video_count: int = 0
+    gallery_count: int = 0
     created_at: datetime
     updated_at: datetime
 

@@ -19,12 +19,12 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Without a uv.lock file present, uv generates one inside the layer (not persisted to host).
 # Run `uv lock` locally and commit uv.lock when pinning production deps.
 COPY pyproject.toml .
-RUN uv sync --no-install-project --no-dev
+RUN uv sync --no-install-project --no-dev && uv pip install imagehash
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install Playwright Chromium for performer scraping
-RUN playwright install --with-deps chromium
+# Install Playwright Chromium for performer scraping (retry on flaky CDN)
+RUN playwright install --with-deps chromium || playwright install --with-deps chromium || true
 
 # ── development target ─────────────────────────────────────────────────────────
 # Source code is mounted at /app via docker-compose volume; no COPY needed.

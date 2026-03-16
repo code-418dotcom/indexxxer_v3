@@ -80,6 +80,43 @@ export async function uploadPerformerImage(id: string, file: File): Promise<Perf
   return data;
 }
 
+export async function setImageFromGallery(
+  performerId: string,
+  galleryId: string,
+  imageIndex: number,
+): Promise<Performer> {
+  const { data } = await client.post(
+    `/performers/${performerId}/image/from-gallery`,
+    null,
+    { params: { gallery_id: galleryId, image_index: imageIndex } },
+  );
+  return data;
+}
+
+export async function setImageFromUrl(
+  performerId: string,
+  url: string,
+): Promise<Performer> {
+  const { data } = await client.post(
+    `/performers/${performerId}/image/from-url`,
+    null,
+    { params: { url } },
+  );
+  return data;
+}
+
+export async function setImageFromThumbnail(
+  performerId: string,
+  mediaId: string,
+): Promise<Performer> {
+  const { data } = await client.post(
+    `/performers/${performerId}/image/from-thumbnail`,
+    null,
+    { params: { media_id: mediaId } },
+  );
+  return data;
+}
+
 export async function scrapeAllPerformers(): Promise<{ status: string; task_id: string }> {
   const { data } = await client.post("/performers/scrape-all");
   return data;

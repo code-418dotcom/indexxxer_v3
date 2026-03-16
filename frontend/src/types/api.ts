@@ -120,6 +120,8 @@ export interface Performer {
   freeones_url?: string;
   scraped_at?: string;
   media_count: number;
+  video_count: number;
+  gallery_count: number;
   created_at: string;
   updated_at: string;
 }

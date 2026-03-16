@@ -160,7 +160,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
     volumes:
+      - ${NSFW_TAGGER_PATH:-../../nsfw_ai_model_server}:/app:rw
       - ${MEDIA_ROOT:-/mnt/e/media}:/media:ro
     ports:
       - "8001:8000"

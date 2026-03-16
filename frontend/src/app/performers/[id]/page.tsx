@@ -26,12 +26,15 @@ import {
   matchPerformer,
   performerImageUrl,
   scrapePerformer,
+  setImageFromGallery,
+  setImageFromThumbnail,
+  setImageFromUrl,
   uploadPerformerImage,
 } from "@/lib/api/performers";
-import { galleryCoverUrl } from "@/lib/api/galleries";
+import { galleryCoverUrl, galleryImageUrl, getGallery } from "@/lib/api/galleries";
 import { thumbnailUrl } from "@/lib/api/media";
 import { formatBytes } from "@/lib/utils";
-import type { Gallery, MediaItem } from "@/types/api";
+import type { Gallery, GalleryDetail, MediaItem } from "@/types/api";
 
 // ── Info row ─────────────────────────────────────────────────────────────────
 
@@ -47,13 +50,13 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
 
 // ── Media card ───────────────────────────────────────────────────────────────
 
-function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) {
+function MediaCard({ item, onClick, onSetProfile }: { item: MediaItem; onClick: () => void; onSetProfile?: () => void }) {
   return (
-    <div
-      onClick={onClick}
-      className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all cursor-pointer"
-    >
-      <div className="relative w-full aspect-video bg-[var(--color-muted)]">
+    <div className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all">
+      <div
+        onClick={onClick}
+        className="relative w-full aspect-video bg-[var(--color-muted)] cursor-pointer"
+      >
         {item.thumbnail_url ? (
           <Image
             src={item.thumbnail_url}
@@ -73,8 +76,17 @@ function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) 
           </span>
         )}
       </div>
-      <div className="px-2 py-1.5">
-        <p className="text-[11px] text-[var(--color-foreground)] truncate">{item.filename}</p>
+      <div className="px-2 py-1.5 flex items-center justify-between gap-1">
+        <p className="text-[11px] text-[var(--color-foreground)] truncate min-w-0">{item.filename}</p>
+        {onSetProfile && item.thumbnail_url && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSetProfile(); }}
+            className="shrink-0 p-1 rounded hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[hsl(217_91%_65%)] transition-colors"
+            title="Set as performer profile image"
+          >
+            <Camera className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -82,43 +94,51 @@ function MediaCard({ item, onClick }: { item: MediaItem; onClick: () => void }) 
 
 // ── Gallery card ────────────────────────────────────────────────────────────
 
-function GalleryCard({ gallery }: { gallery: Gallery }) {
+function GalleryCard({ gallery, onPickImage }: { gallery: Gallery; onPickImage: (galleryId: string) => void }) {
   const cover = gallery.cover_url ? galleryCoverUrl(gallery.id) : null;
 
   return (
-    <a
-      href={`/galleries/${gallery.id}`}
-      className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all cursor-pointer"
-    >
-      <div className="relative w-full aspect-square bg-[var(--color-muted)]">
-        {cover ? (
-          <Image
-            src={cover}
-            alt={gallery.filename}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-105"
-            unoptimized
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <ImageIcon className="w-10 h-10 text-[var(--color-muted-foreground)] opacity-30" />
-          </div>
-        )}
-        <span className="absolute bottom-1.5 right-1.5 text-[10px] font-semibold bg-black/70 text-white px-1.5 py-0.5 rounded">
-          {gallery.image_count} images
-        </span>
-      </div>
-      <div className="px-2 py-1.5">
-        <p className="text-[11px] text-[var(--color-foreground)] truncate" title={gallery.filename}>
-          {gallery.filename}
-        </p>
-        {gallery.file_size && (
-          <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
-            {formatBytes(gallery.file_size)}
+    <div className="group relative rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-card)] hover:border-[hsl(217_33%_30%)] hover:shadow-lg transition-all">
+      <a href={`/galleries/${gallery.id}`} className="cursor-pointer">
+        <div className="relative w-full aspect-square bg-[var(--color-muted)]">
+          {cover ? (
+            <Image
+              src={cover}
+              alt={gallery.filename}
+              fill
+              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              unoptimized
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <ImageIcon className="w-10 h-10 text-[var(--color-muted-foreground)] opacity-30" />
+            </div>
+          )}
+          <span className="absolute bottom-1.5 right-1.5 text-[10px] font-semibold bg-black/70 text-white px-1.5 py-0.5 rounded">
+            {gallery.image_count} images
+          </span>
+        </div>
+      </a>
+      <div className="px-2 py-1.5 flex items-center justify-between gap-1">
+        <div className="min-w-0">
+          <p className="text-[11px] text-[var(--color-foreground)] truncate" title={gallery.filename}>
+            {gallery.filename}
           </p>
-        )}
+          {gallery.file_size && (
+            <p className="text-[10px] text-[var(--color-muted-foreground)] mt-0.5">
+              {formatBytes(gallery.file_size)}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={(e) => { e.preventDefault(); onPickImage(gallery.id); }}
+          className="shrink-0 p-1 rounded hover:bg-[var(--color-muted)] text-[var(--color-muted-foreground)] hover:text-[hsl(217_91%_65%)] transition-colors"
+          title="Pick profile image from this gallery"
+        >
+          <Camera className="w-3.5 h-3.5" />
+        </button>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -134,6 +154,9 @@ export default function PerformerDetailPage() {
   const [activeTab, setActiveTab] = useState<"video" | "gallery">("video");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<MediaItem | null>(null);
+  const [pickingGallery, setPickingGallery] = useState<string | null>(null);
+  const [imgVersion, setImgVersion] = useState(0);
+  const [imageUrl, setImageUrl] = useState("");
 
   const { data: performer, isLoading } = useQuery({
     queryKey: ["performer", id],
@@ -176,6 +199,7 @@ export default function PerformerDetailPage() {
   const uploadImage = useMutation({
     mutationFn: (file: File) => uploadPerformerImage(id, file),
     onSuccess: () => {
+      setImgVersion((v) => v + 1);
       queryClient.invalidateQueries({ queryKey: ["performer", id] });
     },
   });
@@ -184,6 +208,39 @@ export default function PerformerDetailPage() {
     mutationFn: () => deletePerformer(id),
     onSuccess: () => {
       router.push("/performers");
+    },
+  });
+
+  const { data: pickerGallery } = useQuery({
+    queryKey: ["gallery-detail", pickingGallery],
+    queryFn: () => getGallery(pickingGallery!),
+    enabled: !!pickingGallery,
+  });
+
+  const setFromUrl = useMutation({
+    mutationFn: (url: string) => setImageFromUrl(id, url),
+    onSuccess: () => {
+      setImgVersion((v) => v + 1);
+      setImageUrl("");
+      queryClient.invalidateQueries({ queryKey: ["performer", id] });
+    },
+  });
+
+  const setFromThumbnail = useMutation({
+    mutationFn: (mediaId: string) => setImageFromThumbnail(id, mediaId),
+    onSuccess: () => {
+      setImgVersion((v) => v + 1);
+      queryClient.invalidateQueries({ queryKey: ["performer", id] });
+    },
+  });
+
+  const setFromGallery = useMutation({
+    mutationFn: ({ galleryId, imageIndex }: { galleryId: string; imageIndex: number }) =>
+      setImageFromGallery(id, galleryId, imageIndex),
+    onSuccess: () => {
+      setImgVersion((v) => v + 1);
+      queryClient.invalidateQueries({ queryKey: ["performer", id] });
+      setPickingGallery(null);
     },
   });
 
@@ -238,7 +295,7 @@ export default function PerformerDetailPage() {
               >
                 {performer.profile_image_url ? (
                   <Image
-                    src={performerImageUrl(performer.id)}
+                    src={`${performerImageUrl(performer.id)}?v=${imgVersion}`}
                     alt={performer.name}
                     fill
                     className="object-cover"
@@ -293,6 +350,30 @@ export default function PerformerDetailPage() {
                     <ExternalLink className="w-3 h-3" />
                     View on Freeones
                   </a>
+                )}
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    placeholder="Image URL"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && imageUrl.trim()) setFromUrl.mutate(imageUrl.trim());
+                    }}
+                    className="flex-1 min-w-0 px-2 py-1.5 rounded-lg text-xs bg-[var(--color-muted)] border border-[var(--color-border)] text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)] focus:outline-none focus:border-[hsl(217_91%_60%)]"
+                  />
+                  <button
+                    onClick={() => { if (imageUrl.trim()) setFromUrl.mutate(imageUrl.trim()); }}
+                    disabled={!imageUrl.trim() || setFromUrl.isPending}
+                    className="shrink-0 px-2 py-1.5 rounded-lg text-xs font-medium border border-[var(--color-border)] hover:border-[hsl(217_33%_30%)] hover:bg-[var(--color-muted)] disabled:opacity-50 transition-all"
+                  >
+                    {setFromUrl.isPending ? "..." : "Set"}
+                  </button>
+                </div>
+                {setFromUrl.isError && (
+                  <p className="text-[10px] text-red-400">
+                    {(setFromUrl.error as Error)?.message || "Failed to download image"}
+                  </p>
                 )}
                 {confirmDelete ? (
                   <button
@@ -409,7 +490,12 @@ export default function PerformerDetailPage() {
                     {media.length > 0 && (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {media.map((item) => (
-                          <MediaCard key={item.id} item={item} onClick={() => setSelected(item)} />
+                          <MediaCard
+                            key={item.id}
+                            item={item}
+                            onClick={() => setSelected(item)}
+                            onSetProfile={() => setFromThumbnail.mutate(item.id)}
+                          />
                         ))}
                       </div>
                     )}
@@ -454,7 +540,7 @@ export default function PerformerDetailPage() {
                     {galleries.length > 0 && (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {galleries.map((g) => (
-                          <GalleryCard key={g.id} gallery={g} />
+                          <GalleryCard key={g.id} gallery={g} onPickImage={setPickingGallery} />
                         ))}
                       </div>
                     )}
@@ -494,6 +580,70 @@ export default function PerformerDetailPage() {
       )}
       {selected && selected.media_type === "video" && (
         <VideoOverlay item={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* Gallery image picker overlay */}
+      {pickingGallery && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 overflow-y-auto"
+          onClick={() => setPickingGallery(null)}
+        >
+          <div
+            className="relative w-full max-w-4xl mx-auto px-4 pt-6 pb-12"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-white">
+                Select profile image
+              </h2>
+              <button
+                onClick={() => setPickingGallery(null)}
+                className="p-2 rounded-lg text-white/50 hover:text-white transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!pickerGallery ? (
+              <div className="flex items-center justify-center h-32 text-white/50 text-sm">
+                Loading gallery...
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                {pickerGallery.images.map((img) => (
+                  <button
+                    key={img.id}
+                    onClick={() =>
+                      setFromGallery.mutate({
+                        galleryId: pickingGallery,
+                        imageIndex: img.index_order,
+                      })
+                    }
+                    disabled={setFromGallery.isPending}
+                    className="relative aspect-square rounded-lg overflow-hidden border border-white/10 hover:border-[hsl(217_91%_60%)] hover:ring-2 hover:ring-[hsl(217_91%_60%/0.3)] transition-all group"
+                  >
+                    <Image
+                      src={galleryImageUrl(pickingGallery, img.index_order)}
+                      alt={img.filename}
+                      fill
+                      className="object-cover transition-transform duration-200 group-hover:scale-105"
+                      unoptimized
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                      <Camera className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {setFromGallery.isPending && (
+              <div className="mt-4 text-center text-sm text-white/50">
+                Setting profile image...
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
