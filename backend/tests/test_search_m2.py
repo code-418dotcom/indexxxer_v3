@@ -4,9 +4,7 @@ M2 search tests.
 Covers:
 - Full-text search (tsvector)
 - pg_trgm fuzzy fallback (when tsvector returns nothing)
-- Auto-detect mode selection (_should_use_semantic)
-- GET /search with mode= param
-- GET /media/{id}/similar (empty when no CLIP embeddings)
+- GET /search endpoint
 """
 
 from __future__ import annotations
@@ -18,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.media_item import MediaItem
 from app.models.media_source import MediaSource
-from app.services.search_service import _should_use_semantic
 from app.models.base import new_uuid
 
 
@@ -38,7 +35,6 @@ async def _make_item(
     media_type: str = "image",
     mime_type: str = "image/jpeg",
     is_favourite: bool = False,
-    clip_status: str = "pending",
 ) -> MediaItem:
     item = MediaItem(
         id=new_uuid(),
@@ -49,7 +45,6 @@ async def _make_item(
         mime_type=mime_type,
         index_status="indexed",
         is_favourite=is_favourite,
-        clip_status=clip_status,
     )
     db.add(item)
     await db.flush()
@@ -68,22 +63,6 @@ async def _make_item(
     return item
 
 
-# ── _should_use_semantic ───────────────────────────────────────────────────────
-
-def test_should_use_semantic_short():
-    assert not _should_use_semantic("sunset")
-    assert not _should_use_semantic("sunset beach")
-
-
-def test_should_use_semantic_long_words():
-    assert _should_use_semantic("woman on a sunny beach")
-    assert _should_use_semantic("close up portrait of a woman smiling")
-
-
-def test_should_use_semantic_long_string():
-    assert _should_use_semantic("a" * 31)
-
-
 # ── Full-text search ───────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -91,7 +70,7 @@ async def test_search_text_hit(client: AsyncClient, db_session: AsyncSession):
     src = await _make_source(db_session)
     await _make_item(db_session, src.id, filename="sunset_beach.jpg")
 
-    r = await client.get("/api/v1/search", params={"q": "sunset", "mode": "text"})
+    r = await client.get("/api/v1/search", params={"q": "sunset"})
     assert r.status_code == 200
     data = r.json()
     assert data["total"] >= 1
@@ -104,85 +83,19 @@ async def test_search_text_no_hit(client: AsyncClient, db_session: AsyncSession)
     await _make_item(db_session, src.id, filename="vacation.jpg")
 
     # Query that won't match tsvector or trgm (nonsense string)
-    r = await client.get("/api/v1/search", params={"q": "xyzzy_nonexistent_abc", "mode": "text"})
+    r = await client.get("/api/v1/search", params={"q": "xyzzy_nonexistent_abc"})
     assert r.status_code == 200
     assert r.json()["total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_search_auto_mode_short_query(client: AsyncClient, db_session: AsyncSession):
-    """≤2 words → text mode (no CLIP import required)."""
+async def test_search_short_query(client: AsyncClient, db_session: AsyncSession):
     src = await _make_source(db_session)
     await _make_item(db_session, src.id, filename="landscape.jpg")
 
     r = await client.get("/api/v1/search", params={"q": "landscape"})
     assert r.status_code == 200
     assert r.json()["total"] >= 1
-
-
-@pytest.mark.asyncio
-async def test_search_auto_mode_long_query_falls_back_to_text(
-    client: AsyncClient, db_session: AsyncSession
-):
-    """≥3 words → semantic attempted; falls back to text when CLIP not available."""
-    src = await _make_source(db_session)
-    await _make_item(db_session, src.id, filename="portrait.jpg")
-
-    # 'auto' with long query tries semantic, which falls back to full_text_search
-    r = await client.get(
-        "/api/v1/search",
-        params={"q": "portrait of a person", "mode": "auto"},
-    )
-    # Should not error — either returns results or empty
-    assert r.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_search_mode_param_text(client: AsyncClient, db_session: AsyncSession):
-    src = await _make_source(db_session)
-    await _make_item(db_session, src.id, filename="ocean_wave.jpg")
-
-    r = await client.get("/api/v1/search", params={"q": "ocean", "mode": "text"})
-    assert r.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_search_mode_param_semantic(client: AsyncClient, db_session: AsyncSession):
-    """Semantic mode falls back to text when CLIP not available."""
-    src = await _make_source(db_session)
-    await _make_item(db_session, src.id, filename="mountain.jpg")
-
-    r = await client.get("/api/v1/search", params={"q": "mountain view", "mode": "semantic"})
-    # Falls back gracefully — should not 500
-    assert r.status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_search_mode_param_hybrid(client: AsyncClient, db_session: AsyncSession):
-    src = await _make_source(db_session)
-    await _make_item(db_session, src.id, filename="forest.jpg")
-
-    r = await client.get("/api/v1/search", params={"q": "forest trees nature walk", "mode": "hybrid"})
-    assert r.status_code == 200
-
-
-# ── /media/{id}/similar ────────────────────────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_similar_no_embedding(client: AsyncClient, db_session: AsyncSession):
-    src = await _make_source(db_session)
-    item = await _make_item(db_session, src.id, clip_status="pending")
-
-    r = await client.get(f"/api/v1/media/{item.id}/similar")
-    assert r.status_code == 200
-    assert r.json() == []  # no embedding → empty list
-
-
-@pytest.mark.asyncio
-async def test_similar_unknown_item(client: AsyncClient, db_session: AsyncSession):
-    r = await client.get("/api/v1/media/nonexistent-id/similar")
-    assert r.status_code == 200
-    assert r.json() == []
 
 
 # ── Favourite filter ───────────────────────────────────────────────────────────
@@ -218,14 +131,13 @@ async def test_patch_is_favourite(client: AsyncClient, db_session: AsyncSession)
 # ── Result shape ───────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_search_result_has_m2_fields(client: AsyncClient, db_session: AsyncSession):
+async def test_search_result_has_expected_fields(client: AsyncClient, db_session: AsyncSession):
     src = await _make_source(db_session)
     await _make_item(db_session, src.id, filename="waterfall.jpg")
 
-    r = await client.get("/api/v1/search", params={"q": "waterfall", "mode": "text"})
+    r = await client.get("/api/v1/search", params={"q": "waterfall"})
     assert r.status_code == 200
     items = r.json()["items"]
     if items:
         item = items[0]
         assert "is_favourite" in item
-        assert "clip_status" in item

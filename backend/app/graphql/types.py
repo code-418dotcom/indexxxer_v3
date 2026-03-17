@@ -31,10 +31,6 @@ class MediaItemGQL:
     mime_type: Optional[str] = None
     file_size: Optional[int] = None
     is_favourite: bool = False
-    caption: Optional[str] = None
-    caption_status: Optional[str] = None
-    summary: Optional[str] = None
-    face_count: int = 0
     created_at: datetime
     thumbnail_url: Optional[str] = None
     tags: list[TagGQL] = strawberry.field(default_factory=list)
@@ -61,19 +57,10 @@ class IndexJobGQL:
 
 
 @strawberry.type
-class FaceClusterGQL:
-    cluster_id: int
-    member_count: int
-    representative_thumbnail_url: Optional[str] = None
-
-
-@strawberry.type
 class AnalyticsOverviewGQL:
     total_media: int
     total_sources: int
     storage_bytes: int
-    face_count: int
-    cluster_count: int
 
 
 @strawberry.type

@@ -13,6 +13,7 @@ import {
 import { Topbar } from "@/components/layout/Topbar";
 import {
   getDownloadHistory,
+  getDownloadStatus,
   previewGallery,
   startDownloadWithUrls,
 } from "@/lib/api/downloader";
@@ -39,6 +40,15 @@ export default function DownloaderPage() {
       setTimeout(() => qc.invalidateQueries({ queryKey: ["download-history"] }), 5000);
     },
   });
+
+  const { data: status } = useQuery({
+    queryKey: ["download-status", subdirectory],
+    queryFn: () => getDownloadStatus(subdirectory),
+    enabled: !!subdirectory && download.isSuccess,
+    refetchInterval: 2_000,
+  });
+
+  const downloadedFiles = new Set(status?.files ?? []);
 
   const { data: history } = useQuery({
     queryKey: ["download-history"],
@@ -143,21 +153,32 @@ export default function DownloaderPage() {
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-[var(--color-border)]">
                 <span className="text-xs font-medium text-[var(--color-foreground)]">
-                  {imageUrls.length} images ready to download
+                  {downloadedFiles.size > 0
+                    ? `${downloadedFiles.size} / ${imageUrls.length} downloaded`
+                    : `${imageUrls.length} images ready to download`}
                 </span>
               </div>
               <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-1 p-2">
-                {imageUrls.slice(0, 24).map((imgUrl, i) => (
-                  <div key={i} className="relative aspect-square rounded overflow-hidden bg-[var(--color-muted)]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imgUrl}
-                      alt={`Preview ${i + 1}`}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
-                ))}
+                {imageUrls.slice(0, 24).map((imgUrl, i) => {
+                  const filename = imgUrl.split("/").pop()?.split("?")[0] || "";
+                  const done = downloadedFiles.has(filename);
+                  return (
+                    <div key={i} className="relative aspect-square rounded overflow-hidden bg-[var(--color-muted)]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={`Preview ${i + 1}`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {done && (
+                        <div className="absolute top-1 left-1">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400 drop-shadow-lg" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {imageUrls.length > 24 && (
                   <div className="flex items-center justify-center aspect-square rounded bg-[var(--color-muted)] text-[var(--color-muted-foreground)]">
                     <span className="text-xs">+{imageUrls.length - 24}</span>

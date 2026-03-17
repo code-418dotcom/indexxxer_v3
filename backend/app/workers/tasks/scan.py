@@ -377,12 +377,6 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
     )
 
     # ── Dispatch downstream tasks ─────────────────────────────────────────────
-    from app.workers.tasks.ai import (
-        compute_caption_task,
-        compute_transcript_task,
-        detect_faces_task,
-    )
-    from app.workers.tasks.clip import compute_clip_embedding_task
     from app.workers.tasks.hashing import compute_hash_task
     from app.workers.tasks.thumbnail import generate_thumbnail_task
 
@@ -394,24 +388,13 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         kwargs={"media_item_id": media_item_id},
         queue="hashing",
     )
-    # Dispatch CLIP embedding after thumbnail is expected to be ready.
-    # The task will check for thumbnail_path; if missing it marks status=error.
-    async with task_session() as session:
-        it = await session.get(MediaItem, media_item_id)
-        if it:
-            it.clip_status = "computing"
-    compute_clip_embedding_task.apply_async(
-        kwargs={"media_id": media_item_id},
-        queue="ml",
-        countdown=5,  # small delay to let thumbnail task finish first
-    )
 
-    # ── Perceptual hash (duplicate detection) ────────────────────────────────
-    from app.workers.tasks.phash import compute_phash_task
-    compute_phash_task.apply_async(
+    # ── Deduplication (two-phase: pre-filter + multi-frame pHash) ────────────
+    from app.workers.tasks.phash import compute_dedup_task
+    compute_dedup_task.apply_async(
         kwargs={"media_item_id": media_item_id},
         queue="hashing",
-        countdown=8,  # wait for thumbnail to be generated
+        countdown=10,  # wait for metadata + thumbnail
     )
 
     # ── Performer auto-matching ──────────────────────────────────────────────
@@ -433,24 +416,6 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         queue="ai",
         countdown=15,  # wait for thumbnail to be ready
     )
-
-    # ── M3 AI tasks (after thumbnail is ready) ────────────────────────────────
-    if meta.media_type == "image":
-        compute_caption_task.apply_async(
-            kwargs={"media_id": media_item_id}, queue="ml", countdown=10
-        )
-        detect_faces_task.apply_async(
-            kwargs={"media_id": media_item_id}, queue="ml", countdown=15
-        )
-    elif meta.media_type == "video":
-        from app.config import settings
-        if (meta.duration_seconds or 0) <= settings.whisper_max_duration:
-            compute_transcript_task.apply_async(
-                kwargs={"media_id": media_item_id}, queue="ml", countdown=10
-            )
-        detect_faces_task.apply_async(
-            kwargs={"media_id": media_item_id}, queue="ml", countdown=15
-        )
 
     # ── Update job progress ───────────────────────────────────────────────────
     # "watcher" is a sentinel used by the filesystem watcher for ad-hoc

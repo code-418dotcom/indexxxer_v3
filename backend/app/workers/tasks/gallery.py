@@ -202,6 +202,15 @@ async def _index_zip_gallery(file_path: str, source_id: str) -> dict:
         await session.flush()
 
     log.info("index_gallery.done", gallery_id=gallery_id, images=image_count)
+
+    # Dispatch gallery dedup
+    from app.workers.tasks.phash import compute_gallery_dedup_task
+    compute_gallery_dedup_task.apply_async(
+        kwargs={"gallery_id": gallery_id},
+        queue="hashing",
+        countdown=5,
+    )
+
     return {"gallery_id": gallery_id, "image_count": image_count, "status": "indexed"}
 
 
@@ -307,4 +316,13 @@ async def _index_folder_gallery(folder_path: str, source_id: str) -> dict:
         await session.flush()
 
     log.info("index_folder_gallery.done", gallery_id=gallery_id, images=image_count)
+
+    # Dispatch gallery dedup
+    from app.workers.tasks.phash import compute_gallery_dedup_task
+    compute_gallery_dedup_task.apply_async(
+        kwargs={"gallery_id": gallery_id},
+        queue="hashing",
+        countdown=5,
+    )
+
     return {"gallery_id": gallery_id, "image_count": image_count, "status": "indexed"}

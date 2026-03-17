@@ -3,12 +3,37 @@
 import { Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/lib/store/uiStore";
+import { getStatus } from "@/lib/api/status";
 
 interface TopbarProps {
   title: React.ReactNode;
   children?: React.ReactNode;
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  api: "API",
+  database: "DB",
+  redis: "Redis",
+  worker: "Worker",
+  beat: "Beat",
+  tagger: "Tagger",
+};
+
+function StatusDot({ up, label }: { up: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5" title={`${label}: ${up ? "up" : "down"}`}>
+      <span
+        className={cn(
+          "w-2 h-2 rounded-full shrink-0",
+          up ? "bg-emerald-400" : "bg-red-400"
+        )}
+      />
+      <span className="text-[11px] text-[var(--color-muted-foreground)]">{label}</span>
+    </div>
+  );
 }
 
 export function Topbar({ title, children }: TopbarProps) {
@@ -16,6 +41,14 @@ export function Topbar({ title, children }: TopbarProps) {
   const { setMobileMenuOpen } = useUIStore();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  const { data: status } = useQuery({
+    queryKey: ["service-status"],
+    queryFn: getStatus,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+    retry: 1,
+  });
 
   return (
     <header className="flex items-center gap-3 md:gap-4 px-3 md:px-5 h-14 border-b border-[var(--color-border)] bg-[var(--color-background)] shrink-0">
@@ -34,6 +67,19 @@ export function Topbar({ title, children }: TopbarProps) {
 
       {/* Slot for page-specific controls (e.g. search bar) */}
       <div className="flex-1 min-w-0">{children}</div>
+
+      {/* Service status indicators — desktop only */}
+      {status && (
+        <div className="hidden md:flex items-center gap-3 shrink-0">
+          {status.services.map((svc) => (
+            <StatusDot
+              key={svc.name}
+              up={svc.up}
+              label={SERVICE_LABELS[svc.name] ?? svc.name}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Theme toggle — rendered only after mount to avoid SSR/client mismatch */}
       <button

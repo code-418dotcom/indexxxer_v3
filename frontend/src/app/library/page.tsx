@@ -162,11 +162,6 @@ export default function LibraryPage() {
               <>
                 <span>{total.toLocaleString()} items</span>
                 {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
-                {query && (
-                  <span className="text-violet-400 text-[10px]">
-                    {items.length >= 3 && query.split(" ").length >= 3 ? "· semantic" : "· text"}
-                  </span>
-                )}
               </>
             )}
           </div>

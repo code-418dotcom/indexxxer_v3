@@ -57,12 +57,6 @@ class Settings(BaseSettings):
     # ── M4 Webhooks ──────────────────────────────────────────────────────────
     webhook_secret: str = "change-me-webhook-secret"
 
-    # ── M3 AI / Ollama ───────────────────────────────────────────────────────
-    ollama_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "qwen2.5-coder:32b"
-    # Maximum video duration (seconds) eligible for Whisper transcription
-    whisper_max_duration: int = 600
-
     # ── NSFW AI Tagger ─────────────────────────────────────────────────────
     nsfw_tagger_url: str = "http://nsfw_tagger:8000"
     nsfw_tagger_threshold: float = 0.4

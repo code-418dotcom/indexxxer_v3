@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Film, Heart, ImageIcon, User } from "lucide-react";
+import { Film, Heart, ImageIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn, formatBytes, formatDuration } from "@/lib/utils";
 import { thumbnailUrl, patchMedia } from "@/lib/api/media";
@@ -86,14 +86,6 @@ export function MediaCard({ item, size, selected, onClick, onSelect }: MediaCard
           {item.media_type}
         </span>
 
-        {/* Face count badge */}
-        {item.face_count > 0 && (
-          <span className="absolute bottom-1.5 left-7 flex items-center gap-0.5 text-[10px] font-medium bg-black/70 text-white px-1.5 py-0.5 rounded">
-            <User className="w-2.5 h-2.5" />
-            {item.face_count}
-          </span>
-        )}
-
         {/* Favourite heart */}
         <button
           className={cn(
@@ -145,6 +137,27 @@ export function MediaCard({ item, size, selected, onClick, onSelect }: MediaCard
           {formatBytes(item.file_size)}
           {item.width && item.height && ` · ${item.width}×${item.height}`}
         </p>
+        {item.tags.length > 0 && (
+          <div className="flex flex-wrap gap-0.5 mt-1">
+            {item.tags.slice(0, 4).map((tag) => (
+              <span
+                key={tag.id}
+                className="text-[8px] font-medium px-1 py-0.5 rounded"
+                style={{
+                  backgroundColor: tag.color ? `${tag.color}22` : "var(--color-muted)",
+                  color: tag.color || "var(--color-muted-foreground)",
+                }}
+              >
+                {tag.name}
+              </span>
+            ))}
+            {item.tags.length > 4 && (
+              <span className="text-[8px] text-[var(--color-muted-foreground)] px-1 py-0.5">
+                +{item.tags.length - 4}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

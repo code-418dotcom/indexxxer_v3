@@ -1,30 +1,20 @@
 """
-Search service — M2.
+Search service — text search only.
 
 Text path:   tsvector match → pg_trgm fuzzy fallback
-Semantic path: CLIP text→embedding → pgvector cosine distance
-Auto-detect: ≤2 words → text; ≥3 words → semantic (overridable via mode param)
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, literal, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.pagination import PaginationParams, paginate
 from app.models.media_item import MediaItem
 from app.models.tag import MediaTag
-from app.services.media_service import WITH_TAGS_AND_FACES, to_media_summary
-
-
-# ── Mode detection ─────────────────────────────────────────────────────────────
-
-def _should_use_semantic(q: str) -> bool:
-    """Auto-detect: ≥3 words or >30 chars → semantic CLIP search."""
-    stripped = q.strip()
-    return len(stripped.split()) >= 3 or len(stripped) > 30
+from app.services.media_service import WITH_TAGS_AND_PERFORMERS, to_media_summary
 
 
 # ── Shared filter helpers ──────────────────────────────────────────────────────
@@ -96,7 +86,7 @@ async def full_text_search(
     # Primary: tsvector match
     stmt = (
         select(MediaItem)
-        .options(*WITH_TAGS_AND_FACES)
+        .options(*WITH_TAGS_AND_PERFORMERS)
         .where(MediaItem.search_vector.op("@@")(ts_query))
     )
     stmt = _apply_common_filters(
@@ -157,7 +147,7 @@ async def fuzzy_text_search(
 
     stmt = (
         select(MediaItem)
-        .options(*WITH_TAGS_AND_FACES)
+        .options(*WITH_TAGS_AND_PERFORMERS)
         .where(sim > 0.3)
     )
     stmt = _apply_common_filters(
@@ -183,150 +173,6 @@ async def fuzzy_text_search(
     ).scalars().all()
 
     return paginate([to_media_summary(i) for i in items], total, params)
-
-
-# ── Semantic search (CLIP) ─────────────────────────────────────────────────────
-
-async def semantic_search(
-    db: AsyncSession,
-    *,
-    q: str,
-    media_type: str | None = None,
-    tag_ids: list[str] | None = None,
-    source_id: str | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    sort: str = "relevance",
-    order: str = "desc",
-    page: int = 1,
-    limit: int = 50,
-) -> dict:
-    """Encode query with CLIP text encoder and return nearest neighbours."""
-    params = PaginationParams(page=page, limit=limit)
-
-    try:
-        embedding = _encode_text_query(q)
-    except Exception:
-        # CLIP not available — fall back to text search
-        return await full_text_search(
-            db,
-            q=q,
-            media_type=media_type,
-            tag_ids=tag_ids,
-            source_id=source_id,
-            date_from=date_from,
-            date_to=date_to,
-            sort=sort,
-            order=order,
-            page=page,
-            limit=limit,
-        )
-
-    try:
-        from pgvector.sqlalchemy import Vector
-
-        query_vec = literal(embedding, type_=Vector(768))
-    except ImportError:
-        return await full_text_search(
-            db, q=q, media_type=media_type, tag_ids=tag_ids,
-            source_id=source_id, date_from=date_from, date_to=date_to,
-            sort=sort, order=order, page=page, limit=limit,
-        )
-
-    distance = MediaItem.clip_embedding.op("<=>")(query_vec)
-
-    stmt = (
-        select(MediaItem)
-        .options(*WITH_TAGS_AND_FACES)
-        .where(MediaItem.clip_status == "done")
-        .where(MediaItem.clip_embedding.isnot(None))
-    )
-    stmt = _apply_common_filters(
-        stmt,
-        media_type=media_type,
-        source_id=source_id,
-        tag_ids=tag_ids,
-        date_from=date_from,
-        date_to=date_to,
-    )
-    # Always order by cosine distance for semantic; other sort fields apply on tie
-    stmt = stmt.order_by(distance)
-
-    total = (
-        await db.execute(select(func.count()).select_from(stmt.subquery()))
-    ).scalar_one()
-
-    items = (
-        await db.execute(stmt.offset(params.offset).limit(params.limit))
-    ).scalars().all()
-
-    return paginate([to_media_summary(i) for i in items], total, params)
-
-
-def _encode_text_query(q: str) -> list[float]:
-    """Encode a text query with CLIP and return a unit-normalised 768-dim vector."""
-    from app.ml.clip_model import get_clip_model
-    import torch
-
-    model, _, tokenizer = get_clip_model()
-    tokens = tokenizer([q])
-    with torch.no_grad():
-        feat = model.encode_text(tokens)
-        feat = feat / feat.norm(dim=-1, keepdim=True)
-    return feat[0].cpu().numpy().tolist()
-
-
-# ── Hybrid search (RRF fusion) ─────────────────────────────────────────────────
-
-async def hybrid_search(
-    db: AsyncSession,
-    *,
-    q: str,
-    media_type: str | None = None,
-    tag_ids: list[str] | None = None,
-    source_id: str | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    sort: str = "relevance",
-    order: str = "desc",
-    page: int = 1,
-    limit: int = 50,
-) -> dict:
-    """Reciprocal Rank Fusion of text + semantic results."""
-    params = PaginationParams(page=page, limit=limit)
-    fetch_n = min(200, limit * 4)  # fetch more from each pass for RRF
-
-    # Run both passes with large window
-    text_res = await full_text_search(
-        db, q=q, media_type=media_type, tag_ids=tag_ids,
-        source_id=source_id, date_from=date_from, date_to=date_to,
-        sort=sort, order=order, page=1, limit=fetch_n,
-    )
-    sem_res = await semantic_search(
-        db, q=q, media_type=media_type, tag_ids=tag_ids,
-        source_id=source_id, date_from=date_from, date_to=date_to,
-        sort=sort, order=order, page=1, limit=fetch_n,
-    )
-
-    # Reciprocal Rank Fusion (k=60 is standard)
-    k = 60
-    scores: dict[str, float] = {}
-    items_by_id: dict[str, object] = {}
-
-    for rank, item in enumerate(text_res["items"]):
-        scores[item.id] = scores.get(item.id, 0.0) + 1.0 / (k + rank + 1)
-        items_by_id[item.id] = item
-
-    for rank, item in enumerate(sem_res["items"]):
-        scores[item.id] = scores.get(item.id, 0.0) + 1.0 / (k + rank + 1)
-        items_by_id[item.id] = item
-
-    ranked = sorted(scores.keys(), key=lambda i: scores[i], reverse=True)
-    total = len(ranked)
-    page_ids = ranked[params.offset: params.offset + params.limit]
-    page_items = [items_by_id[i] for i in page_ids]
-
-    return paginate(page_items, total, params)
 
 
 # ── Autocomplete suggestions ───────────────────────────────────────────────────

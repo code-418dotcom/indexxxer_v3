@@ -31,13 +31,6 @@ export async function bulkMedia(payload: BulkActionRequest) {
   return data;
 }
 
-export async function getSimilar(id: string, limit = 12) {
-  const { data } = await client.get<MediaItem[]>(`/media/${id}/similar`, {
-    params: { limit },
-  });
-  return data;
-}
-
 export function thumbnailUrl(id: string) {
   return `/api/v1/media/${id}/thumbnail`;
 }

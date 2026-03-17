@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.media_face import MediaFace
 from app.models.media_item import MediaItem
 from app.models.media_source import MediaSource
 from app.models.query_log import QueryLog
@@ -31,16 +30,6 @@ async def get_overview(db: AsyncSession) -> dict:
         await db.execute(select(func.coalesce(func.sum(MediaItem.file_size), 0)))
     ).scalar_one()
 
-    # Face stats
-    face_count = (await db.execute(select(func.count()).select_from(MediaFace))).scalar_one()
-    cluster_count = (
-        await db.execute(
-            select(func.count(MediaFace.cluster_id.distinct())).where(
-                MediaFace.cluster_id.isnot(None)
-            )
-        )
-    ).scalar_one()
-
     # Source count
     source_count = (await db.execute(select(func.count()).select_from(MediaSource))).scalar_one()
 
@@ -50,8 +39,6 @@ async def get_overview(db: AsyncSession) -> dict:
         "pending": status_counts.get("pending", 0) + status_counts.get("thumbnailing", 0),
         "error": status_counts.get("error", 0),
         "storage_bytes": int(storage_bytes),
-        "face_count": face_count,
-        "cluster_count": cluster_count,
         "source_count": source_count,
     }
 

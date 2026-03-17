@@ -1,14 +1,8 @@
 """
 Search endpoints.
 
-GET /search               — text / semantic / hybrid / auto-detect search
+GET /search               — full-text search (tsvector + pg_trgm fallback)
 GET /search/suggestions   — filename autocomplete
-
-mode param:
-  auto     (default) — ≤2 words → text, ≥3 words → semantic
-  text     — force full-text (tsvector + pg_trgm fallback)
-  semantic — force CLIP semantic
-  hybrid   — Reciprocal Rank Fusion of both
 """
 
 import time
@@ -30,10 +24,6 @@ router = APIRouter(prefix="/search", tags=["search"])
 @router.get("", response_model=PaginatedResponse[MediaItemSummary])
 async def search(
     q: str = Query(..., min_length=1, description="Search query"),
-    mode: str = Query(
-        default="auto",
-        description="Search mode: auto | text | semantic | hybrid",
-    ),
     type: str | None = Query(None, description="Filter by media_type: image | video"),
     tag_ids: list[str] = Query(default=[], description="Filter by tag IDs (AND logic)"),
     source_id: str | None = Query(None),
@@ -47,7 +37,8 @@ async def search(
     db: AsyncSession = Depends(get_db),
 ):
     start_ms = time.monotonic()
-    common = dict(
+    result = await search_service.full_text_search(
+        db,
         q=q,
         media_type=type,
         tag_ids=tag_ids or None,
@@ -60,22 +51,6 @@ async def search(
         limit=limit,
     )
 
-    actual_mode = mode
-    if mode == "semantic":
-        result = await search_service.semantic_search(db, **common)
-    elif mode == "hybrid":
-        result = await search_service.hybrid_search(db, **common)
-    elif mode == "text":
-        result = await search_service.full_text_search(db, **common)
-    else:
-        # auto: pick based on query length
-        if search_service._should_use_semantic(q):
-            actual_mode = "semantic"
-            result = await search_service.semantic_search(db, **common)
-        else:
-            actual_mode = "text"
-            result = await search_service.full_text_search(db, **common)
-
     latency_ms = int((time.monotonic() - start_ms) * 1000)
     result_count = result.total if hasattr(result, "total") else 0
     user_id = current_user.id if current_user else None
@@ -84,7 +59,7 @@ async def search(
     log_query_task.apply_async(
         kwargs={
             "query": q,
-            "search_mode": actual_mode,
+            "search_mode": "text",
             "result_count": result_count,
             "latency_ms": latency_ms,
             "user_id": user_id,

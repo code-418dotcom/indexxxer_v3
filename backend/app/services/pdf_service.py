@@ -29,14 +29,21 @@ async def list_pdfs(
     api_v1_prefix: str,
     page: int = 1,
     limit: int = 48,
+    q: str | None = None,
 ) -> tuple[list[PDFDocumentSchema], int]:
     offset = (page - 1) * limit
 
-    total_result = await db.execute(select(func.count()).select_from(PDFDocument))
+    stmt = select(PDFDocument)
+    if q:
+        stmt = stmt.where(
+            PDFDocument.filename.ilike(f"%{q}%") | PDFDocument.title.ilike(f"%{q}%")
+        )
+
+    total_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
     total = total_result.scalar_one()
 
     result = await db.execute(
-        select(PDFDocument).order_by(PDFDocument.filename).offset(offset).limit(limit)
+        stmt.order_by(PDFDocument.filename).offset(offset).limit(limit)
     )
     docs = result.scalars().all()
 

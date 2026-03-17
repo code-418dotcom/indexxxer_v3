@@ -63,17 +63,6 @@ async def bulk_action(
     return await media_service.bulk_action(db, body)
 
 
-@router.get("/{item_id}/similar", response_model=list[MediaItemSummary])
-async def get_similar(
-    item_id: str,
-    limit: int = Query(default=12, ge=1, le=50),
-    _: None = Auth,
-    db: AsyncSession = Depends(get_db),
-):
-    """Return visually similar items using CLIP cosine distance."""
-    return await media_service.get_similar_items(db, item_id, limit=limit)
-
-
 @router.get("/{item_id}", response_model=MediaItemDetail)
 async def get_media_item(
     item_id: str,

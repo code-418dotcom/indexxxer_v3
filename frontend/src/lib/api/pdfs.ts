@@ -5,6 +5,7 @@ export async function listPDFs(params?: {
   source_id?: string;
   page?: number;
   limit?: number;
+  q?: string;
 }): Promise<PaginatedResponse<PDFDocument>> {
   const { data } = await client.get("/pdfs", { params });
   return data;

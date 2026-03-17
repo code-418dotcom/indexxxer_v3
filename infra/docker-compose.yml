@@ -92,7 +92,7 @@ services:
   #   indexing   — filesystem scan, metadata extraction
   #   thumbnails — thumbnail generation (CPU-bound, resumable)
   #   hashing    — async SHA-256 computation
-  #   ai         — Ollama summaries, face clustering, AI backfill
+  #   ai         — Ollama summaries, AI backfill
   worker:
     <<: *backend
     command: >

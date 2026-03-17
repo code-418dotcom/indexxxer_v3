@@ -1,7 +1,7 @@
 """
 Thread-safe LRU model registry for the GPU worker.
 
-All ML models (CLIP, BLIP-2, Whisper, InsightFace) are loaded lazily and
+All ML models (CLIP, BLIP-2, Whisper) are loaded lazily and
 cached in-process. The RTX 4000 ADA has 20 GB VRAM; all M3 models together
 use ~12 GB so eviction is rare but available under memory pressure.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Sparkles, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -10,12 +10,6 @@ interface SearchBarProps {
   placeholder?: string;
   className?: string;
   inputRef?: React.RefObject<HTMLInputElement | null>;
-}
-
-/** Mirror of backend _should_use_semantic: ≥3 words or >30 chars → semantic. */
-function isSemantic(q: string) {
-  const s = q.trim();
-  return s.length > 30 || s.split(/\s+/).length >= 3;
 }
 
 export function SearchBar({
@@ -29,8 +23,6 @@ export function SearchBar({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const internalRef = useRef<HTMLInputElement | null>(null);
   const ref = inputRef ?? internalRef;
-
-  const showSemantic = local.length > 0 && isSemantic(local);
 
   // Debounce 300ms
   useEffect(() => {
@@ -53,24 +45,13 @@ export function SearchBar({
         onChange={(e) => setLocal(e.target.value)}
         placeholder={placeholder}
         className={cn(
-          "w-full h-9 pl-9 text-sm rounded-lg",
-          showSemantic ? "pr-24" : "pr-8",
+          "w-full h-9 pl-9 pr-8 text-sm rounded-lg",
           "bg-[var(--color-muted)] border border-[var(--color-border)]",
           "text-[var(--color-foreground)] placeholder:text-[var(--color-muted-foreground)]",
           "focus:outline-none focus:border-[hsl(217_91%_60%)] focus:ring-1 focus:ring-[hsl(217_91%_60%/0.3)]",
           "transition-colors"
         )}
       />
-      {/* Semantic mode badge */}
-      {showSemantic && (
-        <span
-          className="absolute right-7 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-violet-500/20 text-violet-400 border border-violet-500/30 pointer-events-none"
-          title="Semantic search active (CLIP)"
-        >
-          <Sparkles className="w-2.5 h-2.5" />
-          AI
-        </span>
-      )}
       {local && (
         <button
           onClick={() => { setLocal(""); onChange(""); }}

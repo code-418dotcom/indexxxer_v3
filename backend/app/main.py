@@ -89,7 +89,6 @@ def create_app() -> FastAPI:
         downloader,
         duplicates,
         export,
-        faces,
         filters,
         galleries,
         jobs,
@@ -102,6 +101,7 @@ def create_app() -> FastAPI:
         tags,
         users,
         webhooks,
+        status,
         workers,
     )
 
@@ -116,7 +116,6 @@ def create_app() -> FastAPI:
     app.include_router(filters.router,   prefix=settings.api_v1_prefix)
     app.include_router(export.router,    prefix=settings.api_v1_prefix)
     app.include_router(performers.router, prefix=settings.api_v1_prefix)
-    app.include_router(faces.router,     prefix=settings.api_v1_prefix)
     app.include_router(galleries.router, prefix=settings.api_v1_prefix)
     app.include_router(pdfs.router,      prefix=settings.api_v1_prefix)
     app.include_router(workers.router,   prefix=settings.api_v1_prefix)
@@ -124,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(duplicates.router, prefix=settings.api_v1_prefix)
     app.include_router(downloader.router, prefix=settings.api_v1_prefix)
     app.include_router(analytics.router, prefix=settings.api_v1_prefix)
+    app.include_router(status.router,    prefix=settings.api_v1_prefix)
 
     # ── GraphQL ───────────────────────────────────────────────────────────────
     from app.graphql.schema import graphql_router

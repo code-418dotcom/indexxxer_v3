@@ -136,6 +136,10 @@ class MediaItem(Base, TimestampMixin):
     # ── Deduplication ──────────────────────────────────────────────────────
     perceptual_hash: Mapped[str | None] = mapped_column(String(16), nullable=True)
     duplicate_group: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # pending | computing | done | error
+    dedup_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
 
     # ── Relationships ────────────────────────────────────────────────────────
     source: Mapped["MediaSource"] = relationship(  # noqa: F821
@@ -144,9 +148,9 @@ class MediaItem(Base, TimestampMixin):
     media_tags: Mapped[list["MediaTag"]] = relationship(  # noqa: F821
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )
-    faces: Mapped[list["MediaFace"]] = relationship(  # noqa: F821
+    media_performers: Mapped[list["MediaPerformer"]] = relationship(  # noqa: F821
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )
-    media_performers: Mapped[list["MediaPerformer"]] = relationship(  # noqa: F821
+    frame_hashes: Mapped[list["MediaFrameHash"]] = relationship(  # noqa: F821
         back_populates="media_item", lazy="noload", cascade="all, delete-orphan"
     )

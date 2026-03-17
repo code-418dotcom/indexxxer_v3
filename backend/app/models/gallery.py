@@ -32,6 +32,13 @@ class Gallery(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
+    # ── Deduplication ──────────────────────────────────────────────────────
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    duplicate_group: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    dedup_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+
     images: Mapped[list["GalleryImage"]] = relationship(
         back_populates="gallery",
         lazy="noload",
@@ -59,5 +66,7 @@ class GalleryImage(Base):
     index_order: Mapped[int] = mapped_column(Integer, nullable=False)
     width: Mapped[int | None] = mapped_column(Integer, nullable=True)
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    phash: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     gallery: Mapped["Gallery"] = relationship(back_populates="images", lazy="noload")

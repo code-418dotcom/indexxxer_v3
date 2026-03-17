@@ -40,11 +40,12 @@ def _render_page(file_path: str, page_num: int, scale: float = _RENDER_SCALE) ->
 async def list_pdfs(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=48, ge=1, le=200),
+    q: str | None = Query(default=None),
     _: None = Auth,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     items, total = await pdf_service.list_pdfs(
-        db, api_v1_prefix=settings.api_v1_prefix, page=page, limit=limit
+        db, api_v1_prefix=settings.api_v1_prefix, page=page, limit=limit, q=q
     )
     pages = (total + limit - 1) // limit
     return {

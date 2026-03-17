@@ -15,7 +15,6 @@ from strawberry.types import Info
 from app.config import settings
 from app.graphql.types import (
     AnalyticsOverviewGQL,
-    FaceClusterGQL,
     MediaItemGQL,
     MediaSourceGQL,
     SearchInput,
@@ -79,10 +78,6 @@ def _media_to_gql(item) -> MediaItemGQL:
         mime_type=item.mime_type,
         file_size=item.file_size,
         is_favourite=item.is_favourite or False,
-        caption=item.caption,
-        caption_status=getattr(item, "caption_status", None),
-        summary=item.summary,
-        face_count=len(item.faces) if hasattr(item, "faces") and item.faces else 0,
         created_at=item.created_at,
         thumbnail_url=make_thumbnail_url(item.id) if item.thumbnail_path else None,
         tags=tags,
@@ -92,16 +87,14 @@ def _media_to_gql(item) -> MediaItemGQL:
 async def resolve_media(id: str, info: Info) -> Optional[MediaItemGQL]:
     _require_auth(info)
     db = _get_db(info)
-    from app.services import media_service
-    from app.services.media_service import WITH_TAGS_AND_FACES
+    from app.services.media_service import WITH_TAGS_AND_PERFORMERS
     from sqlalchemy import select
     from app.models.media_item import MediaItem
-    from sqlalchemy.orm import selectinload
 
     result = await db.execute(
         select(MediaItem)
         .where(MediaItem.id == id)
-        .options(*WITH_TAGS_AND_FACES)
+        .options(*WITH_TAGS_AND_PERFORMERS)
     )
     item = result.scalar_one_or_none()
     if not item:
@@ -122,18 +115,7 @@ async def resolve_search(input: SearchInput, info: Info) -> SearchResultGQL:
                   date_from=None, date_to=None, sort="relevance", order="desc",
                   page=page, limit=limit)
 
-    mode = input.mode or "auto"
-    if mode == "semantic":
-        result = await search_service.semantic_search(db, **common)
-    elif mode == "hybrid":
-        result = await search_service.hybrid_search(db, **common)
-    elif mode == "text":
-        result = await search_service.full_text_search(db, **common)
-    else:
-        if search_service._should_use_semantic(input.query):
-            result = await search_service.semantic_search(db, **common)
-        else:
-            result = await search_service.full_text_search(db, **common)
+    result = await search_service.full_text_search(db, **common)
 
     items = []
     for summary in result.items:
@@ -148,7 +130,6 @@ async def resolve_search(input: SearchInput, info: Info) -> SearchResultGQL:
             mime_type=summary.mime_type,
             file_size=summary.file_size,
             is_favourite=summary.is_favourite,
-            face_count=summary.face_count,
             created_at=summary.created_at,
             thumbnail_url=summary.thumbnail_url,
         ))
@@ -179,8 +160,6 @@ async def resolve_analytics_overview(info: Info) -> AnalyticsOverviewGQL:
         total_media=data["total_media"],
         total_sources=data["source_count"],
         storage_bytes=data["storage_bytes"],
-        face_count=data["face_count"],
-        cluster_count=data["cluster_count"],
     )
 
 

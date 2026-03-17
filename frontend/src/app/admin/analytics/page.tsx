@@ -26,7 +26,6 @@ export default function AnalyticsPage() {
             { label: "Total Media", value: overview.total_media.toLocaleString() },
             { label: "Sources", value: overview.source_count },
             { label: "Storage", value: bytes(overview.storage_bytes) },
-            { label: "Faces", value: `${overview.face_count} (${overview.cluster_count} clusters)` },
           ].map(({ label, value }) => (
             <div key={label} className="bg-neutral-800 rounded-xl p-4">
               <p className="text-neutral-400 text-xs uppercase tracking-wide mb-1">{label}</p>

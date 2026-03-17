@@ -34,6 +34,11 @@ export async function startDownloadWithUrls(imageUrls: string[], subdirectory: s
   return data;
 }
 
+export async function getDownloadStatus(subdirectory: string): Promise<{ files: string[]; count: number }> {
+  const { data } = await client.get(`/downloader/status/${encodeURIComponent(subdirectory)}`);
+  return data;
+}
+
 export async function getDownloadHistory(): Promise<{ directories: DownloadHistoryDir[] }> {
   const { data } = await client.get("/downloader/history");
   return data;

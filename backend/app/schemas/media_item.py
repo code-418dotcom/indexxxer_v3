@@ -27,13 +27,6 @@ class MediaItemSummary(BaseModel):
     index_status: str
     indexed_at: datetime | None = None
     is_favourite: bool = False
-    clip_status: str = "pending"
-    # M3 AI status fields (summary-level — no full text in list view)
-    caption: str | None = None
-    caption_status: str = "pending"
-    transcript_status: str = "pending"
-    summary_status: str = "pending"
-    face_count: int = 0
     performers: list[PerformerRef] = []
     duplicate_group: str | None = None
 
@@ -51,9 +44,6 @@ class MediaItemDetail(MediaItemSummary):
     index_error: str | None = None
     created_at: datetime
     updated_at: datetime
-    # M3: full text fields (omitted from list view for bandwidth)
-    transcript: str | None = None
-    summary: str | None = None
     perceptual_hash: str | None = None
 
 

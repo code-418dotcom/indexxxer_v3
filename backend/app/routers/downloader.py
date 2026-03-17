@@ -96,6 +96,20 @@ async def start_download_with_urls(
     return {"task_id": result.id, "status": "started", "subdirectory": subdir, "image_count": len(body.image_urls)}
 
 
+@router.get("/status/{subdirectory}")
+async def download_status(
+    subdirectory: str,
+    _user=Depends(get_current_user),
+):
+    """Check which files exist in a download subdirectory."""
+    path = os.path.join(DOWNLOAD_ROOT, subdirectory)
+    if not os.path.exists(path):
+        return {"files": [], "count": 0}
+
+    files = [f for f in os.listdir(path) if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp'))]
+    return {"files": files, "count": len(files)}
+
+
 @router.get("/history")
 async def download_history(
     _user=Depends(get_current_user),

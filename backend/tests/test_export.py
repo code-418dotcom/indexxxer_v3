@@ -46,7 +46,6 @@ async def _make_item(
         file_size=1024,
         index_status="indexed",
         is_favourite=is_favourite,
-        clip_status="pending",
     )
     db.add(item)
     await db.flush()

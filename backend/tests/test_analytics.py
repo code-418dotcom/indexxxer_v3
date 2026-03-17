@@ -15,8 +15,6 @@ async def test_analytics_overview(client: AsyncClient, db_session: AsyncSession)
     data = resp.json()
     assert "total_media" in data
     assert "storage_bytes" in data
-    assert "face_count" in data
-    assert "cluster_count" in data
     assert "source_count" in data
 
 

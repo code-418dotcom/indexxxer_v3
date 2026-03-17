@@ -1,11 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { ExternalLink, Film, Heart, ImageIcon, Mic, Sparkles, Tag, X } from "lucide-react";
+import { ExternalLink, Film, Heart, ImageIcon, Tag, X } from "lucide-react";
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn, formatBytes, formatDate, formatDuration } from "@/lib/utils";
-import { getSimilar, patchMedia, thumbnailUrl, streamUrl } from "@/lib/api/media";
+import { patchMedia, thumbnailUrl, streamUrl } from "@/lib/api/media";
 import type { MediaItem } from "@/types/api";
 
 interface VideoOverlayProps {
@@ -24,7 +24,7 @@ function MetaRow({ label, value }: { label: string; value?: string | number | nu
   );
 }
 
-export function VideoOverlay({ item, onClose, onSelectItem }: VideoOverlayProps) {
+export function VideoOverlay({ item, onClose }: VideoOverlayProps) {
   const queryClient = useQueryClient();
 
   // Esc to close
@@ -47,20 +47,11 @@ export function VideoOverlay({ item, onClose, onSelectItem }: VideoOverlayProps)
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media"] }),
   });
 
-  const { data: similar } = useQuery({
-    queryKey: ["similar", item.id],
-    queryFn: () => getSimilar(item.id, 12),
-    enabled: item.clip_status === "done",
-    staleTime: 5 * 60 * 1000,
-  });
-
   return (
-    // Backdrop — click outside to close
     <div
       className="fixed inset-0 z-50 bg-black/90 overflow-y-auto"
       onClick={onClose}
     >
-      {/* Content — stop propagation so clicks inside don't dismiss */}
       <div
         className="relative w-full max-w-5xl mx-auto px-4 pt-6 pb-12 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
@@ -122,7 +113,6 @@ export function VideoOverlay({ item, onClose, onSelectItem }: VideoOverlayProps)
 
         {/* Info panel */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Left: File info + AI */}
           <div className="flex flex-col gap-4">
             {/* File info */}
             <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] px-4 py-3">
@@ -178,101 +168,7 @@ export function VideoOverlay({ item, onClose, onSelectItem }: VideoOverlayProps)
                 </div>
               </div>
             )}
-
-            {/* AI: Caption */}
-            {item.caption_status === "done" && item.caption && (
-              <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] px-4 py-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                    Caption
-                  </span>
-                  <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
-                    BLIP-2
-                  </span>
-                </div>
-                <p className="text-xs text-[var(--color-foreground)] italic leading-relaxed">
-                  {item.caption}
-                </p>
-              </div>
-            )}
-
-            {/* AI: Transcript */}
-            {item.transcript_status === "done" && item.transcript && (
-              <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] px-4 py-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Mic className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                    Transcript
-                  </span>
-                  <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
-                    Whisper
-                  </span>
-                </div>
-                <pre className="text-xs text-[var(--color-foreground)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto font-sans">
-                  {item.transcript}
-                </pre>
-              </div>
-            )}
-
-            {/* AI: Summary */}
-            {item.summary_status === "done" && item.summary && (
-              <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] px-4 py-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-[var(--color-muted-foreground)]" />
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                    Summary
-                  </span>
-                  <span className="ml-auto text-[10px] text-[var(--color-muted-foreground)] bg-[var(--color-muted)] px-1.5 py-0.5 rounded">
-                    Ollama
-                  </span>
-                </div>
-                <p className="text-xs text-[var(--color-foreground)] leading-relaxed">
-                  {item.summary}
-                </p>
-              </div>
-            )}
           </div>
-
-          {/* Right: Similar items */}
-          {similar && similar.length > 0 && (
-            <div className="bg-[var(--color-card)] rounded-xl border border-[var(--color-border)] px-4 py-3 self-start">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted-foreground)] mb-3">
-                Similar
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {similar.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onSelectItem?.(s)}
-                    className="relative aspect-video rounded-lg overflow-hidden bg-[var(--color-muted)] hover:ring-2 hover:ring-[hsl(217_91%_60%)] transition-all group"
-                    title={s.filename}
-                  >
-                    {s.thumbnail_url ? (
-                      <Image
-                        src={thumbnailUrl(s.id)}
-                        alt={s.filename}
-                        fill
-                        className="object-cover transition-transform duration-200 group-hover:scale-105"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-[var(--color-muted-foreground)]">
-                        {s.media_type === "video" ? (
-                          <Film className="w-5 h-5" />
-                        ) : (
-                          <ImageIcon className="w-5 h-5" />
-                        )}
-                      </div>
-                    )}
-                    <span className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/80 text-[9px] text-white truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                      {s.filename}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

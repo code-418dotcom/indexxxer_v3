@@ -66,17 +66,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Install with: uv sync --extra ml
-# Required on the GPU worker for CLIP, BLIP-2, Whisper, InsightFace
-ml = [
-    "open-clip-torch>=2.26",
-    "faster-whisper>=1.1",
-    "insightface>=0.7",
-    "onnxruntime-gpu>=1.18",
-    "transformers>=4.44",
-    "accelerate>=0.34",
-    "opencv-python-headless>=4.10",
-]
 
 [tool.uv]
 dev-dependencies = [

@@ -64,7 +64,7 @@ async def test_graphql_create_tag_mutation(client: AsyncClient, db_session: Asyn
 @pytest.mark.asyncio
 async def test_graphql_analytics_overview(client: AsyncClient, db_session: AsyncSession):
     """GraphQL analyticsOverview query should return stats."""
-    query = '{ analyticsOverview { totalMedia totalSources storageBytes faceCount clusterCount } }'
+    query = '{ analyticsOverview { totalMedia totalSources storageBytes } }'
     resp = await client.post(
         "/api/v1/graphql",
         json={"query": query},

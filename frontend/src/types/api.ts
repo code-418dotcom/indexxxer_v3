@@ -51,9 +51,6 @@ export type IndexStatus =
   | "indexed"
   | "error";
 
-export type ClipStatus = "pending" | "computing" | "done" | "error";
-export type AiStatus = "pending" | "computing" | "transcribing" | "summarising" | "done" | "error" | "skipped";
-
 export interface MediaItem {
   id: string;
   source_id: string;
@@ -77,15 +74,6 @@ export interface MediaItem {
   updated_at: string;
   tags: TagRef[];
   is_favourite: boolean;
-  clip_status: ClipStatus;
-  // M3 AI fields
-  caption?: string;
-  caption_status: AiStatus;
-  transcript?: string;
-  transcript_status: AiStatus;
-  summary?: string;
-  summary_status: AiStatus;
-  face_count: number;
   performers: PerformerRef[];
 }
 
@@ -147,29 +135,6 @@ export interface PerformerUpdate {
   measurements?: string;
   years_active?: string;
   freeones_url?: string;
-}
-
-// ─── Faces ──────────────────────────────────────────────────────────────────
-
-export interface Face {
-  id: string;
-  media_id: string;
-  cluster_id?: number;
-  bbox_x: number;
-  bbox_y: number;
-  bbox_w: number;
-  bbox_h: number;
-  confidence: number;
-  created_at: string;
-}
-
-export interface FaceCluster {
-  cluster_id: number;
-  member_count: number;
-  representative_media_id?: string;
-  representative_face_id?: string;
-  face_crop_url?: string;
-  representative_thumbnail_url?: string;
 }
 
 export interface MediaItemPatch {
@@ -260,7 +225,7 @@ export interface FilterCreate {
 
 // ─── Search ────────────────────────────────────────────────────────────────
 
-export type SearchMode = "auto" | "text" | "semantic" | "hybrid";
+export type SearchMode = "text";
 
 export interface SearchParams {
   q?: string;
@@ -383,8 +348,6 @@ export interface AnalyticsOverview {
   pending: number;
   error: number;
   storage_bytes: number;
-  face_count: number;
-  cluster_count: number;
   source_count: number;
 }
 

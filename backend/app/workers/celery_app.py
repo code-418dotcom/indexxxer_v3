@@ -5,8 +5,7 @@ Queue routing:
   indexing   — filesystem scanning, metadata extraction, search index sync
   thumbnails — thumbnail generation (CPU, resumable — checks for existing file first)
   hashing    — async SHA-256 computation (I/O-bound, runs after initial indexing)
-  ml         — GPU tasks: CLIP, BLIP-2 captioning, Whisper, InsightFace (concurrency=1)
-  ai         — CPU/HTTP tasks: Ollama summaries, face clustering, backfill
+  ai         — CPU/HTTP tasks: NSFW tagging
 """
 
 from celery import Celery
@@ -39,13 +38,6 @@ celery_app.config_from_object(
             "app.workers.tasks.thumbnail.*": {"queue": "thumbnails"},
             "app.workers.tasks.hashing.*": {"queue": "hashing"},
             "app.workers.tasks.watcher.*": {"queue": "indexing"},
-            "app.workers.tasks.clip.*": {"queue": "ml"},
-            "app.workers.tasks.ai.compute_caption_task": {"queue": "ml"},
-            "app.workers.tasks.ai.compute_transcript_task": {"queue": "ml"},
-            "app.workers.tasks.ai.detect_faces_task": {"queue": "ml"},
-            "app.workers.tasks.ai.compute_summary_task": {"queue": "ai"},
-            "app.workers.tasks.ai.cluster_faces_task": {"queue": "ai"},
-            "app.workers.tasks.ai.backfill_ai_task": {"queue": "ai"},
             "app.workers.tasks.webhook.*": {"queue": "webhooks"},
             "app.workers.tasks.performer.*": {"queue": "indexing"},
             "app.workers.tasks.downloader.*": {"queue": "indexing"},
@@ -64,15 +56,11 @@ celery_app.config_from_object(
                 "task": "app.workers.tasks.scan.reap_stalled_jobs_task",
                 "schedule": 600,  # every 10 minutes
             },
-            # Every 30 minutes: cluster unclustered face embeddings
-            "cluster-faces": {
-                "task": "app.workers.tasks.ai.cluster_faces_task",
-                "schedule": 1800,
-            },
-            # Every hour: dispatch AI tasks for items still in pending state
-            "backfill-ai": {
-                "task": "app.workers.tasks.ai.backfill_ai_task",
-                "schedule": 3600,
+            # Every 60 seconds: write a heartbeat key so the status endpoint
+            # can verify beat is alive
+            "beat-heartbeat": {
+                "task": "app.workers.tasks.heartbeat.beat_heartbeat_task",
+                "schedule": 60,
             },
         },
     }
@@ -87,14 +75,13 @@ celery_app.autodiscover_tasks(
         "app.workers.tasks.thumbnail",
         "app.workers.tasks.hashing",
         "app.workers.tasks.watcher",
-        "app.workers.tasks.clip",
-        "app.workers.tasks.ai",
         "app.workers.tasks.webhook",
         "app.workers.tasks.analytics",
         "app.workers.tasks.performer",
         "app.workers.tasks.nsfw_tag",
         "app.workers.tasks.phash",
         "app.workers.tasks.downloader",
+        "app.workers.tasks.heartbeat",
     ],
     force=True,
 )
