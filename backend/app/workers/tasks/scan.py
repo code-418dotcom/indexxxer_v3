@@ -409,18 +409,12 @@ async def _process_file(source_id: str, job_id: str, file_path: str) -> str:
         countdown=2,
     )
 
-    # ── NSFW AI auto-tagging ─────────────────────────────────────────────────
-    from app.workers.tasks.nsfw_tag import nsfw_tag_task
-    nsfw_tag_task.apply_async(
-        kwargs={"media_item_id": media_item_id},
-        queue="ai",
-        countdown=15,  # wait for thumbnail to be ready
-    )
+    # NSFW AI tagging is triggered manually from the Tags page, not on scan.
 
     # ── Update job progress ───────────────────────────────────────────────────
     # "watcher" is a sentinel used by the filesystem watcher for ad-hoc
     # single-file indexing that isn't associated with a named IndexJob.
-    if job_id != "watcher":
+    if job_id not in ("watcher", "torrent"):
         await _increment_job_field(job_id, "processed_files")
 
     return media_item_id

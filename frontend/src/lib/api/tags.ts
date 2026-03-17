@@ -28,11 +28,57 @@ export async function listTags(params?: {
   return data;
 }
 
-export async function backfillAiTags(): Promise<{ task_id: string; status: string }> {
-  const { data } = await client.post("/tags/ai/backfill");
+export interface BackfillParams {
+  media_type?: "image" | "video";
+  performer_id?: string;
+  category?: string;
+  retag?: boolean;
+}
+
+export async function backfillAiTags(params?: BackfillParams): Promise<{ task_id: string; status: string }> {
+  const { data } = await client.post("/tags/ai/backfill", null, { params });
+  return data;
+}
+
+export async function pauseTagging(): Promise<{ status: string }> {
+  const { data } = await client.post("/tags/ai/pause");
+  return data;
+}
+
+export async function resumeTagging(): Promise<{ status: string }> {
+  const { data } = await client.post("/tags/ai/resume");
+  return data;
+}
+
+export async function stopTagging(): Promise<{ status: string; flushed: number }> {
+  const { data } = await client.post("/tags/ai/stop");
   return data;
 }
 
 export async function deleteTag(id: string): Promise<void> {
   await client.delete(`/tags/${id}`);
+}
+
+export interface TagLogEntry {
+  media_id: string;
+  filename: string;
+  status: string;
+  tags_applied: number;
+  detail: string;
+  ts: string;
+}
+
+export interface TagProgress {
+  total: number;
+  tagged: number;
+  pending: number;
+  queue_depth: number;
+  progress_pct: number;
+  paused: boolean;
+  log: TagLogEntry[];
+}
+
+export async function getTagProgress(): Promise<TagProgress> {
+  const { data } = await client.get<TagProgress>("/tags/ai/progress");
+  return data;
 }

@@ -43,6 +43,7 @@ celery_app.config_from_object(
             "app.workers.tasks.downloader.*": {"queue": "indexing"},
             "app.workers.tasks.nsfw_tag.*": {"queue": "ai"},
             "app.workers.tasks.phash.*": {"queue": "hashing"},
+            "app.workers.tasks.torrents.*": {"queue": "indexing"},
         },
         "task_default_queue": "indexing",
         # Time limits — thumbnail tasks enforce their own via decorator args
@@ -60,6 +61,10 @@ celery_app.config_from_object(
             # can verify beat is alive
             "beat-heartbeat": {
                 "task": "app.workers.tasks.heartbeat.beat_heartbeat_task",
+                "schedule": 60,
+            },
+            "poll-transmission": {
+                "task": "app.workers.tasks.torrents.poll_transmission_task",
                 "schedule": 60,
             },
         },
@@ -81,6 +86,7 @@ celery_app.autodiscover_tasks(
         "app.workers.tasks.nsfw_tag",
         "app.workers.tasks.phash",
         "app.workers.tasks.downloader",
+        "app.workers.tasks.torrents",
         "app.workers.tasks.heartbeat",
     ],
     force=True,

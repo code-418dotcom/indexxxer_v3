@@ -15,5 +15,6 @@ from app.models.saved_filter import SavedFilter  # noqa: F401
 from app.models.query_log import QueryLog  # noqa: F401
 from app.models.source_credential import SourceCredential  # noqa: F401
 from app.models.tag import MediaTag, Tag  # noqa: F401
+from app.models.torrent_download import TorrentDownload  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.webhook import Webhook, WebhookDelivery  # noqa: F401

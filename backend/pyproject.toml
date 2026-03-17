@@ -63,6 +63,9 @@ dependencies = [
 
     # Perceptual hashing (duplicate detection)
     "imagehash>=4.3",
+
+    # Transmission RPC client
+    "transmission-rpc>=7.0",
 ]
 
 [project.optional-dependencies]

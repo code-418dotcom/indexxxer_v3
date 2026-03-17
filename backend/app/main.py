@@ -99,6 +99,7 @@ def create_app() -> FastAPI:
         sources,
         stream,
         tags,
+        torrents,
         users,
         webhooks,
         status,
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(webhooks.router,  prefix=settings.api_v1_prefix)
     app.include_router(duplicates.router, prefix=settings.api_v1_prefix)
     app.include_router(downloader.router, prefix=settings.api_v1_prefix)
+    app.include_router(torrents.router,  prefix=settings.api_v1_prefix)
     app.include_router(analytics.router, prefix=settings.api_v1_prefix)
     app.include_router(status.router,    prefix=settings.api_v1_prefix)
 

@@ -72,13 +72,154 @@ async def create_tag(
 
 @router.post("/ai/backfill")
 async def backfill_ai_tags(
+    media_type: str | None = Query(None, description="image or video"),
+    performer_id: str | None = Query(None),
+    category: str | None = Query(None, description="actions, bdsm, bodyparts, positions"),
+    retag: bool = Query(False, description="Re-tag items that already have AI tags"),
     _: None = Auth,
 ):
-    """Trigger NSFW AI tagging for all media items that don't have AI tags yet."""
+    """Trigger NSFW AI tagging with optional filters."""
     from app.workers.tasks.nsfw_tag import backfill_nsfw_tags_task
 
-    result = backfill_nsfw_tags_task.apply_async(queue="ai")
+    result = backfill_nsfw_tags_task.apply_async(
+        kwargs={
+            "media_type": media_type,
+            "performer_id": performer_id,
+            "category": category,
+            "retag": retag,
+        },
+        queue="ai",
+    )
     return {"task_id": result.id, "status": "dispatched"}
+
+
+@router.post("/ai/pause")
+async def pause_tagging(
+    _: None = Auth,
+):
+    """Pause AI tagging — tasks will re-queue themselves until resumed."""
+    import redis as redis_lib
+    from app.config import settings
+    from app.workers.tasks.nsfw_tag import PAUSED_KEY
+
+    r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+    r.set(PAUSED_KEY, "1")
+    return {"status": "paused"}
+
+
+@router.post("/ai/resume")
+async def resume_tagging(
+    _: None = Auth,
+):
+    """Resume AI tagging."""
+    import redis as redis_lib
+    from app.config import settings
+    from app.workers.tasks.nsfw_tag import PAUSED_KEY
+
+    r = redis_lib.from_url(settings.redis_url, decode_responses=True)
+    r.delete(PAUSED_KEY)
+    return {"status": "resumed"}
+
+
+@router.post("/ai/stop")
+async def stop_tagging(
+    _: None = Auth,
+):
+    """Flush the AI queue, revoke active tasks, and clear pause flag."""
+    import redis as redis_lib
+    from app.config import settings
+    from app.workers.tasks.nsfw_tag import PAUSED_KEY
+    from app.workers.celery_app import celery_app
+
+    r = redis_lib.from_url(settings.celery_broker_url, decode_responses=True)
+    flushed = int(r.llen("ai"))
+    r.delete("ai")
+
+    # Revoke all active nsfw_tag tasks (terminates in-flight workers)
+    inspect = celery_app.control.inspect()
+    revoked = 0
+    try:
+        active = inspect.active() or {}
+        for worker_tasks in active.values():
+            for task in worker_tasks:
+                if "nsfw_tag" in task.get("name", ""):
+                    celery_app.control.revoke(task["id"], terminate=True, signal="SIGTERM")
+                    revoked += 1
+    except Exception:
+        pass
+
+    # Clear pause flag
+    r2 = redis_lib.from_url(settings.redis_url, decode_responses=True)
+    r2.delete(PAUSED_KEY)
+
+    return {"status": "stopped", "flushed": flushed, "revoked": revoked}
+
+
+@router.get("/ai/progress")
+async def tagging_progress(
+    _: None = Auth,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return tagging progress stats and recent log entries."""
+    import json
+    import redis as redis_lib
+    from app.config import settings
+    from app.models.media_item import MediaItem
+    from app.models.tag import MediaTag
+
+    # Count total indexed items
+    total = (await db.execute(
+        select(func.count(MediaItem.id)).where(MediaItem.index_status == "indexed")
+    )).scalar_one()
+
+    # Count items that already have at least one AI tag
+    tagged = (await db.execute(
+        select(func.count(func.distinct(MediaTag.media_id))).where(MediaTag.source == "ai")
+    )).scalar_one()
+
+    # Queue depth for AI queue
+    try:
+        r = redis_lib.from_url(settings.celery_broker_url, decode_responses=True, socket_timeout=2)
+        queue_depth = r.llen("ai")
+    except Exception:
+        queue_depth = 0
+
+    # Recent log entries from Redis stream
+    log_entries = []
+    try:
+        from app.workers.tasks.nsfw_tag import PROGRESS_KEY
+        r2 = redis_lib.from_url(settings.redis_url, decode_responses=True, socket_timeout=2)
+        # Read last 50 entries
+        raw = r2.xrevrange(PROGRESS_KEY, count=50)
+        for entry_id, fields in raw:
+            try:
+                data = json.loads(fields.get("data", "{}"))
+                data["ts"] = entry_id.split("-")[0]
+                log_entries.append(data)
+            except json.JSONDecodeError:
+                pass
+        log_entries.reverse()  # oldest first
+    except Exception:
+        pass
+
+    # Check if paused
+    paused = False
+    try:
+        from app.workers.tasks.nsfw_tag import PAUSED_KEY
+        r3 = redis_lib.from_url(settings.redis_url, decode_responses=True, socket_timeout=2)
+        paused = r3.exists(PAUSED_KEY) == 1
+    except Exception:
+        pass
+
+    return {
+        "total": total,
+        "tagged": tagged,
+        "pending": total - tagged,
+        "queue_depth": queue_depth,
+        "progress_pct": round(tagged / total * 100, 1) if total > 0 else 0,
+        "paused": paused,
+        "log": log_entries,
+    }
 
 
 @router.get("/{tag_id}", response_model=TagResponse)

@@ -57,6 +57,18 @@ class Settings(BaseSettings):
     # ── M4 Webhooks ──────────────────────────────────────────────────────────
     webhook_secret: str = "change-me-webhook-secret"
 
+    # ── Prowlarr ─────────────────────────────────────────────────────────────
+    prowlarr_url: str = ""                       # e.g. "http://prowlarr:9696"
+    prowlarr_api_key: str = ""
+
+    # ── Transmission ─────────────────────────────────────────────────────────
+    transmission_host: str = "transmission"
+    transmission_port: int = 9091
+    transmission_username: str = ""
+    transmission_password: str = ""
+    torrent_download_dir: str = "/downloads/indexxxer"
+    torrent_destination_root: str = "/media/xxx/Downloader"
+
     # ── NSFW AI Tagger ─────────────────────────────────────────────────────
     nsfw_tagger_url: str = "http://nsfw_tagger:8000"
     nsfw_tagger_threshold: float = 0.4
